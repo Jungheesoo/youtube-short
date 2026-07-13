@@ -63,4 +63,6 @@ export const api = {
     }).then(handle),
 
   getQuota: () => fetch(`${BASE}/quota`).then(handle),
+
+  getErrorLog: () => fetch(`${BASE}/logs/error`).then(handle),
 };

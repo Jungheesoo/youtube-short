@@ -11,6 +11,7 @@ export default function ImagePage() {
   const [uploading, setUploading] = useState(null);
   const [copiedId, setCopiedId] = useState(null);
   const [error, setError] = useState(null);
+  const [showAllPrompts, setShowAllPrompts] = useState(false);
 
   const load = useCallback(async () => {
     const { scenes } = await api.getProject(id);
@@ -62,8 +63,33 @@ export default function ImagePage() {
         <a href={AI_STUDIO_URL} target="_blank" rel="noreferrer">
           Google AI Studio
         </a>
-        (하루 약 500장 무료)에서 이미지를 생성한 뒤 다운로드해서 업로드하세요.
+        에서 <strong>Nano Banana 2 Lite</strong> 모델로 이미지를 생성한 뒤 다운로드해서 업로드하세요.
       </p>
+
+      <button onClick={() => setShowAllPrompts((v) => !v)}>
+        {showAllPrompts ? "전체 프롬프트 닫기" : "전체 프롬프트 한번에 보기"}
+      </button>
+
+      {showAllPrompts && (
+        <div className="all-prompts-panel">
+          <p className="tip">
+            AI Studio를 한 번만 열어두고, 같은 대화 안에서 아래 순서대로 이어서 생성하면 매번 앱을
+            오갈 필요가 없고 스타일 일관성도 더 좋아질 수 있습니다.
+          </p>
+          {scenes.map((scene) => (
+            <div key={scene.id} className="all-prompts-item">
+              <div className="all-prompts-item-header">
+                <span>#{scene.scene_order + 1}</span>
+                {scene.scene_type === "outro" && <span className="outro-badge">아웃트로</span>}
+                <button onClick={() => copyPrompt(`all-${scene.id}`, scene.image_prompt)}>
+                  {copiedId === `all-${scene.id}` ? "복사됨!" : "복사"}
+                </button>
+              </div>
+              <p className="prompt-preview">{scene.image_prompt}</p>
+            </div>
+          ))}
+        </div>
+      )}
 
       {error && <p className="error">{error}</p>}
 

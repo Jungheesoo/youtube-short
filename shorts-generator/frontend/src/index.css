@@ -81,6 +81,13 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 }
 .upload-button input { display: none; }
 
+.all-prompts-panel { margin: 16px 0; padding: 16px; background: #1c1c22; border: 1px solid #2a2a30; border-radius: 12px; }
+.all-prompts-item { padding: 10px 0; border-bottom: 1px solid #2a2a30; }
+.all-prompts-item:last-child { border-bottom: none; }
+.all-prompts-item-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.all-prompts-item-header span:first-child { font-weight: bold; }
+.all-prompts-item-header button { margin-left: auto; padding: 4px 10px; font-size: 12px; }
+
 .narration-list { list-style: none; padding: 0; }
 .narration-list li {
   display: flex; align-items: center; gap: 12px; padding: 12px; border-bottom: 1px solid #2a2a30;

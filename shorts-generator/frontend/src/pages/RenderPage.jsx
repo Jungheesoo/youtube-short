@@ -13,6 +13,7 @@ export default function RenderPage() {
   const [titleCandidates, setTitleCandidates] = useState([]);
   const [description, setDescription] = useState("");
   const [copied, setCopied] = useState(null);
+  const [errorLog, setErrorLog] = useState(null);
 
   useEffect(() => {
     api.getProject(id).then(({ project }) => {
@@ -34,6 +35,7 @@ export default function RenderPage() {
   async function handleRender() {
     setRendering(true);
     setError(null);
+    setErrorLog(null);
     try {
       const { videoPath } = await api.render(id, musicPath || undefined);
       setVideoPath(videoPath);
@@ -44,10 +46,28 @@ export default function RenderPage() {
     }
   }
 
+  async function loadErrorLog() {
+    const { log } = await api.getErrorLog();
+    setErrorLog(log || "(로그가 비어있습니다)");
+  }
+
   return (
     <div className="page">
       <h1>합성 / 미리보기</h1>
-      {error && <p className="error">{error}</p>}
+      {error && (
+        <div>
+          <p className="error">{error}</p>
+          <button onClick={loadErrorLog}>에러 로그 보기</button>
+        </div>
+      )}
+      {errorLog !== null && (
+        <div className="description-box">
+          <pre>{errorLog}</pre>
+          <button onClick={() => copyText("errorLog", errorLog)}>
+            {copied === "errorLog" ? "복사됨!" : "로그 전체 복사 (클로드에게 붙여넣기)"}
+          </button>
+        </div>
+      )}
 
       <label>
         배경음악 파일 경로 (Pixabay/유튜브 오디오 라이브러리에서 다운로드한 로컬 mp3)

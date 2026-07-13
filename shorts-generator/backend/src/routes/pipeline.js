@@ -222,4 +222,12 @@ router.get("/quota", (req, res) => {
   res.json({ ...getQuotaStatus(), tts: getTtsQuotaStatus() });
 });
 
+// --- 9. 에러 로그 조회 (클로드에게 붙여넣기용) ---
+router.get("/logs/error", (req, res) => {
+  const logPath = path.join(process.cwd(), "logs", "error.log");
+  if (!fs.existsSync(logPath)) return res.json({ log: "" });
+  const content = fs.readFileSync(logPath, "utf-8");
+  res.json({ log: content.slice(-20000) }); // 너무 길면 최근 부분만
+});
+
 export default router;

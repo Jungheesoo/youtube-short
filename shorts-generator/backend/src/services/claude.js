@@ -27,6 +27,7 @@ export async function generateScript(topic, { styleGuide } = {}) {
 - imagePrompt는 모든 씬에서 동일한 아트 스타일 키워드를 포함해 일관성 유지 (예: "${
     styleGuide || "traditional Korean folk painting style, vibrant colors, digital illustration"
   }")
+- imagePrompt 맨 끝에는 항상 세로 화면 비율 지시를 포함: "vertical 9:16 portrait orientation, mobile phone screen aspect ratio" (가로형으로 생성되면 나중에 세로로 크롭할 때 구도가 깨지므로 반드시 포함)
 - 실존 인물 실명/딥페이크 묘사 금지, 대신 '한 무리의 사람들', '한 청년' 등으로 표현
 - 선정적 표현은 과하지 않게, 유머러스한 반전 위주로
 - 본편 마지막 씬(아웃트로 직전)은 임팩트 있는 마무리/반전으로 구성
