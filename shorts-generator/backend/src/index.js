@@ -7,7 +7,7 @@ import "./db/init.js"; // DB 스키마 초기화
 
 const app = express();
 app.use(cors());
-app.use(express.json({ limit: "10mb" }));
+app.use(express.json({ limit: "20mb" })); // AI Studio에서 수동 다운로드한 이미지 base64 업로드 고려
 
 // 생성된 이미지/오디오/영상 파일 미리보기용 정적 서빙
 app.use("/output-files", express.static(path.join(process.cwd(), "output")));

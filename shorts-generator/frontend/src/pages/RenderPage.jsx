@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { api } from "../api/client.js";
+import { api, toOutputUrl } from "../api/client.js";
 
 export default function RenderPage() {
   const { id } = useParams();
@@ -10,6 +10,26 @@ export default function RenderPage() {
   const [error, setError] = useState(null);
   const [checkedImages, setCheckedImages] = useState(false);
   const [checkedNarration, setCheckedNarration] = useState(false);
+  const [titleCandidates, setTitleCandidates] = useState([]);
+  const [description, setDescription] = useState("");
+  const [copied, setCopied] = useState(null);
+
+  useEffect(() => {
+    api.getProject(id).then(({ project }) => {
+      try {
+        setTitleCandidates(JSON.parse(project.title_candidates || "[]"));
+      } catch {
+        setTitleCandidates([]);
+      }
+      setDescription(project.description || "");
+    });
+  }, [id]);
+
+  async function copyText(key, text) {
+    await navigator.clipboard.writeText(text);
+    setCopied(key);
+    setTimeout(() => setCopied(null), 1500);
+  }
 
   async function handleRender() {
     setRendering(true);
@@ -65,9 +85,31 @@ export default function RenderPage() {
       {videoPath && (
         <div className="preview">
           <h2>완성!</h2>
-          <video controls src={`/output-files/${videoPath.split("output/")[1]}`} />
+          <video controls src={toOutputUrl(videoPath)} />
           <p>파일 위치: {videoPath}</p>
           <p className="tip">업로드 전에 제목/썸네일/자막을 한 번 더 확인하세요.</p>
+
+          <div className="upload-meta">
+            <h3>제목 후보</h3>
+            <ul className="title-candidate-list">
+              {titleCandidates.map((title, i) => (
+                <li key={i}>
+                  <span>{title}</span>
+                  <button onClick={() => copyText(`title-${i}`, title)}>
+                    {copied === `title-${i}` ? "복사됨!" : "복사"}
+                  </button>
+                </li>
+              ))}
+            </ul>
+
+            <h3>설명</h3>
+            <div className="description-box">
+              <pre>{description}</pre>
+              <button onClick={() => copyText("description", description)}>
+                {copied === "description" ? "복사됨!" : "설명 복사"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { v4 as uuid } from "uuid";
 import path from "path";
+import fs from "fs";
 import db from "../db/init.js";
 import { generateScript, recommendTopics } from "../services/claude.js";
 import { generateSceneImage, generateThumbnailImage, getQuotaStatus } from "../services/gemini.js";
@@ -12,8 +13,10 @@ import {
   generateAssSubtitle,
   finalizeWithSubtitlesAndMusic,
   pickDirection,
+  getAudioDuration,
 } from "../services/ffmpeg.js";
 import { updateProjectStatus, getProject, getScenes } from "../jobs/pipelineState.js";
+import { logError } from "../utils/logger.js";
 
 const router = Router();
 const OUTPUT_ROOT = path.join(process.cwd(), "output");
@@ -24,6 +27,7 @@ router.get("/topics/recommend", async (req, res) => {
     const topics = await recommendTopics();
     res.json({ topics });
   } catch (e) {
+    logError("GET /topics/recommend", e);
     res.status(500).json({ error: e.message });
   }
 });
@@ -38,9 +42,16 @@ router.post("/projects", async (req, res) => {
     const projectId = uuid();
 
     db.prepare(
-      `INSERT INTO projects (id, topic, category, status, script_json, title_candidates)
-       VALUES (?, ?, ?, 'script_done', ?, ?)`
-    ).run(projectId, topic, category || null, JSON.stringify(script), JSON.stringify(script.titleCandidates));
+      `INSERT INTO projects (id, topic, category, status, script_json, title_candidates, description)
+       VALUES (?, ?, ?, 'script_done', ?, ?, ?)`
+    ).run(
+      projectId,
+      topic,
+      category || null,
+      JSON.stringify(script),
+      JSON.stringify(script.titleCandidates),
+      script.description || null
+    );
 
     const insertScene = db.prepare(
       `INSERT INTO scenes (id, project_id, scene_order, narration, image_prompt, duration_sec, scene_type)
@@ -52,6 +63,7 @@ router.post("/projects", async (req, res) => {
 
     res.json({ projectId, script });
   } catch (e) {
+    logError("POST /projects", e);
     res.status(500).json({ error: e.message });
   }
 });
@@ -75,6 +87,33 @@ router.post("/projects/:id/scenes/:sceneId/image", async (req, res) => {
 
     res.json({ imagePath: outputPath, quota: getQuotaStatus() });
   } catch (e) {
+    logError(`POST /projects/${id}/scenes/${sceneId}/image`, e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- 3-1. 씬 이미지 수동 업로드 (AI Studio/Gemini 앱에서 무료로 생성한 이미지를 붙여넣기) ---
+router.post("/projects/:id/scenes/:sceneId/image/upload", (req, res) => {
+  const { id, sceneId } = req.params;
+  const { imageBase64, mimeType } = req.body;
+  if (!imageBase64) return res.status(400).json({ error: "imageBase64가 필요합니다." });
+
+  try {
+    const scene = db.prepare(`SELECT * FROM scenes WHERE id = ?`).get(sceneId);
+    if (!scene) return res.status(404).json({ error: "씬을 찾을 수 없습니다." });
+
+    const ext = mimeType === "image/jpeg" ? "jpg" : "png";
+    const outputPath = path.join(OUTPUT_ROOT, id, `scene_${scene.scene_order}.${ext}`);
+    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+    fs.writeFileSync(outputPath, Buffer.from(imageBase64, "base64"));
+
+    db.prepare(
+      `UPDATE scenes SET image_path = ?, regenerate_count = regenerate_count + 1 WHERE id = ?`
+    ).run(outputPath, sceneId);
+
+    res.json({ imagePath: outputPath });
+  } catch (e) {
+    logError(`POST /projects/${id}/scenes/${sceneId}/image/upload`, e);
     res.status(500).json({ error: e.message });
   }
 });
@@ -95,6 +134,7 @@ router.post("/projects/:id/scenes/:sceneId/narration", async (req, res) => {
     db.prepare(`UPDATE scenes SET audio_path = ? WHERE id = ?`).run(outputPath, sceneId);
     res.json({ audioPath: outputPath, quota: getTtsQuotaStatus() });
   } catch (e) {
+    logError(`POST /projects/${id}/scenes/${sceneId}/narration`, e);
     res.status(500).json({ error: e.message });
   }
 });
@@ -112,15 +152,29 @@ router.post("/projects/:id/render", async (req, res) => {
 
   try {
     const scenes = getScenes(id);
-    const clipPaths = [];
+    const missing = scenes.filter((s) => !s.image_path || !s.audio_path);
+    if (missing.length > 0) {
+      const orders = missing.map((s) => s.scene_order + 1).join(", ");
+      throw new Error(`이미지 또는 나레이션이 없는 씬이 있습니다 (#${orders}). 이전 단계에서 모두 채운 뒤 다시 시도하세요.`);
+    }
 
-    let previousDirection = null;
+    // 씬별 실제 TTS 오디오 길이를 측정 — 영상 클립 길이/자막 타이밍 모두 이 값을 기준으로 삼아
+    // 화면전환/자막이 실제 나레이션과 어긋나지 않게 한다 (script의 duration_sec는 추정치일 뿐).
+    const realDurations = [];
     for (const scene of scenes) {
+      realDurations.push(await getAudioDuration(scene.audio_path));
+    }
+
+    const clipPaths = [];
+    let previousDirection = null;
+    for (let i = 0; i < scenes.length; i++) {
+      const scene = scenes[i];
+      const duration = realDurations[i];
       const rawClip = path.join(workDir, `clip_raw_${scene.scene_order}.mp4`);
       const muxedClip = path.join(workDir, `clip_${scene.scene_order}.mp4`);
       // 오프닝 씬은 시선을 중심 오브젝트로 끌어당기는 zoom-in 고정, 이후 씬은 직전과 다른 방향으로 순회
       const direction = scene.scene_order === 0 ? "zoom-in" : pickDirection(previousDirection);
-      await imageToClip(scene.image_path, scene.duration_sec, rawClip, direction);
+      await imageToClip(scene.image_path, duration, rawClip, direction);
       await muxClipWithAudio(rawClip, scene.audio_path, muxedClip);
       clipPaths.push(muxedClip);
       previousDirection = direction;
@@ -129,11 +183,12 @@ router.post("/projects/:id/render", async (req, res) => {
     const concatenated = path.join(workDir, "concatenated.mp4");
     await concatClips(clipPaths, concatenated, workDir);
 
-    // 자막 타이밍은 씬 duration을 누적해 근사치로 생성 (정밀 타이밍은 TTS timestamp 연동 후 개선 권장)
+    // 자막 타이밍도 실제 오디오 길이를 누적해서 계산 (영상 클립 길이와 동일한 기준)
     let cursor = 0;
-    const timings = scenes.map((s) => {
-      const t = { text: s.narration, startSec: cursor, endSec: cursor + s.duration_sec };
-      cursor += s.duration_sec;
+    const timings = scenes.map((s, i) => {
+      const duration = realDurations[i];
+      const t = { text: s.narration, startSec: cursor, endSec: cursor + duration };
+      cursor += duration;
       return t;
     });
     const assPath = path.join(workDir, "subtitles.ass");
@@ -150,6 +205,7 @@ router.post("/projects/:id/render", async (req, res) => {
 
     res.json({ videoPath: finalPath });
   } catch (e) {
+    logError(`POST /projects/${id}/render`, e);
     res.status(500).json({ error: e.message });
   }
 });

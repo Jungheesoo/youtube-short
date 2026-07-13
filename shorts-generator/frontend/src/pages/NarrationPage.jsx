@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { api } from "../api/client.js";
+import { api, toOutputUrl } from "../api/client.js";
 
 export default function NarrationPage() {
   const { id } = useParams();
@@ -60,7 +60,7 @@ export default function NarrationPage() {
             {scene.scene_type === "outro" && <span className="outro-badge">아웃트로</span>}
             <p>{scene.narration}</p>
             {scene.audio_path ? (
-              <audio controls src={`/output-files/${scene.audio_path.split("output/")[1]}`} />
+              <audio controls src={toOutputUrl(scene.audio_path)} />
             ) : (
               <button disabled={generating === scene.id} onClick={() => generateOne(scene.id)}>
                 {generating === scene.id ? "생성 중..." : "생성"}

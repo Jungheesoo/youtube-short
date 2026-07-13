@@ -1,37 +1,49 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { api } from "../api/client.js";
+import { api, toOutputUrl } from "../api/client.js";
+
+const AI_STUDIO_URL = "https://aistudio.google.com/";
 
 export default function ImagePage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [scenes, setScenes] = useState([]);
-  const [quota, setQuota] = useState(null);
-  const [regenerating, setRegenerating] = useState(null);
+  const [uploading, setUploading] = useState(null);
+  const [copiedId, setCopiedId] = useState(null);
   const [error, setError] = useState(null);
 
   const load = useCallback(async () => {
     const { scenes } = await api.getProject(id);
     setScenes(scenes);
-    const q = await api.getQuota();
-    setQuota(q);
   }, [id]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  async function regenerate(sceneId, usePro = false) {
-    setRegenerating(sceneId);
+  async function copyPrompt(sceneId, prompt) {
+    await navigator.clipboard.writeText(prompt);
+    setCopiedId(sceneId);
+    setTimeout(() => setCopiedId(null), 1500);
+  }
+
+  function handleFileSelect(sceneId, file) {
+    if (!file) return;
+    setUploading(sceneId);
     setError(null);
-    try {
-      await api.generateSceneImage(id, sceneId, usePro);
-      await load();
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setRegenerating(null);
-    }
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const base64 = reader.result.split(",")[1];
+        await api.uploadSceneImage(id, sceneId, base64, file.type);
+        await load();
+      } catch (e) {
+        setError(e.message);
+      } finally {
+        setUploading(null);
+      }
+    };
+    reader.readAsDataURL(file);
   }
 
   async function handleNext() {
@@ -39,16 +51,19 @@ export default function ImagePage() {
     navigate(`/projects/${id}/narration`);
   }
 
+  const allImagesDone = scenes.length > 0 && scenes.every((s) => s.image_path);
+
   return (
     <div className="page">
       <h1>컷별 이미지</h1>
 
-      {quota && (
-        <div className="quota-bar">
-          <span>나노바나나: {quota.nanobanana.used} / {quota.nanobanana.limit}</span>
-          <span>나노바나나 프로: {quota.nanobananaPro.used} / {quota.nanobananaPro.limit}</span>
-        </div>
-      )}
+      <p className="tip">
+        Gemini API 결제 없이 무료로 진행 중입니다. 아래 프롬프트를 복사해{" "}
+        <a href={AI_STUDIO_URL} target="_blank" rel="noreferrer">
+          Google AI Studio
+        </a>
+        (하루 약 500장 무료)에서 이미지를 생성한 뒤 다운로드해서 업로드하세요.
+      </p>
 
       {error && <p className="error">{error}</p>}
 
@@ -58,25 +73,32 @@ export default function ImagePage() {
             <span className="scene-order">#{scene.scene_order + 1}</span>
             {scene.scene_type === "outro" && <span className="outro-badge">아웃트로</span>}
             {scene.image_path ? (
-              <img src={`/output-files/${scene.image_path.split("output/")[1]}`} alt="" />
+              <img src={toOutputUrl(scene.image_path)} alt="" />
             ) : (
               <div className="placeholder">이미지 없음</div>
             )}
             <p className="narration-preview">{scene.narration}</p>
+            <p className="prompt-preview">{scene.image_prompt}</p>
             <div className="scene-actions">
-              <button disabled={regenerating === scene.id} onClick={() => regenerate(scene.id, false)}>
-                {regenerating === scene.id ? "생성 중..." : "재생성"}
+              <button onClick={() => copyPrompt(scene.id, scene.image_prompt)}>
+                {copiedId === scene.id ? "복사됨!" : "프롬프트 복사"}
               </button>
-              <button disabled={regenerating === scene.id} onClick={() => regenerate(scene.id, true)}>
-                프로로 재생성
-              </button>
+              <label className="upload-button">
+                {uploading === scene.id ? "업로드 중..." : "이미지 업로드"}
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg"
+                  disabled={uploading === scene.id}
+                  onChange={(e) => handleFileSelect(scene.id, e.target.files?.[0])}
+                />
+              </label>
             </div>
           </div>
         ))}
       </div>
 
-      <button className="next-button" onClick={handleNext}>
-        다음: 나레이션 생성 →
+      <button className="next-button" disabled={!allImagesDone} onClick={handleNext}>
+        {allImagesDone ? "다음: 나레이션 생성 →" : `이미지 업로드 필요 (${scenes.filter((s) => s.image_path).length}/${scenes.length})`}
       </button>
     </div>
   );

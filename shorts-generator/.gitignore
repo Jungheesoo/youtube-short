@@ -3,3 +3,5 @@ node_modules/
 backend/shorts.db
 backend/shorts.db-*
 backend/output/
+backend/logs/
+frontend/dist/

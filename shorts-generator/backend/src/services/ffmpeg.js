@@ -33,6 +33,16 @@ function zoompanFilter(direction, durationSec, fps = 30) {
   }
 }
 
+/** 오디오 파일의 실제 재생 길이(초)를 ffprobe로 측정 */
+export function getAudioDuration(audioPath) {
+  return new Promise((resolve, reject) => {
+    ffmpeg.ffprobe(audioPath, (err, metadata) => {
+      if (err) return reject(err);
+      resolve(metadata.format.duration);
+    });
+  });
+}
+
 /** 이미지 1장 -> Ken Burns 효과가 적용된 짧은 클립 */
 export function imageToClip(imagePath, durationSec, outputPath, direction = pickDirection()) {
   return new Promise((resolve, reject) => {
@@ -111,14 +121,20 @@ Format: Layer, Start, End, Style, Text
   return outputPath;
 }
 
-/** 최종 영상에 자막 번인 + 배경음악 믹스 */
+/**
+ * 최종 영상에 자막 번인 + 배경음악 믹스.
+ *
+ * subtitles= 필터는 인자를 자체적으로 key:value로 파싱해서, Windows 드라이브 문자(C:\...)가
+ * 섞인 절대경로를 넘기면 이스케이프를 해도 깨진다 (실제 재현 확인됨). 대신 .ass 파일이 있는
+ * 디렉터리를 ffmpeg 프로세스의 작업 디렉터리(cwd)로 지정하고 파일명만 상대경로로 넘긴다.
+ */
 export function finalizeWithSubtitlesAndMusic(videoPath, assPath, musicPath, outputPath) {
   return new Promise((resolve, reject) => {
-    const cmd = ffmpeg(videoPath);
+    const cmd = ffmpeg(videoPath, { cwd: path.dirname(assPath) });
     if (musicPath) cmd.input(musicPath);
 
     cmd
-      .videoFilters([`subtitles=${assPath}`])
+      .videoFilters([`subtitles=${path.basename(assPath)}`])
       .outputOptions(
         musicPath
           ? ["-filter_complex", "[1:a]volume=0.15[bgm];[0:a][bgm]amix=inputs=2:duration=first", "-c:v libx264"]

@@ -15,12 +15,14 @@ export async function generateScript(topic, { styleGuide } = {}) {
 
 {
   "titleCandidates": ["제목1", "제목2", "제목3"],
+  "description": "유튜브 설명란에 들어갈 텍스트",
   "scenes": [
     { "narration": "나레이션 텍스트", "imagePrompt": "나노바나나용 영어 이미지 프롬프트", "durationSec": 4, "sceneType": "content" }
   ]
 }
 
 규칙:
+- description은 2~3문장으로 영상 내용을 요약하고 궁금증을 유발한 뒤, 마지막 줄에 관련 해시태그 4~5개(#역사쇼츠 #만약에시리즈 등, 주제에 맞게)를 추가
 - 본편(content) 씬은 6~9개, 전체 40~55초 분량. 그 뒤에 아웃트로(outro) 씬을 정확히 1개 추가해서 scenes 배열 맨 마지막에 넣어 (총 7~10개 씬).
 - imagePrompt는 모든 씬에서 동일한 아트 스타일 키워드를 포함해 일관성 유지 (예: "${
     styleGuide || "traditional Korean folk painting style, vibrant colors, digital illustration"

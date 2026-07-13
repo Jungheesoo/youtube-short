@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS projects (
   -- draft -> script_done -> images_done -> narration_done -> rendered -> uploaded
   script_json TEXT,            -- Claude가 생성한 씬 구조 JSON
   title_candidates TEXT,       -- 제목 후보 JSON 배열
+  description TEXT,            -- 유튜브 설명란용 텍스트
   music_track TEXT,            -- 사용한 배경음악 출처 기록 (저작권 대응용)
   video_path TEXT,
   created_at TEXT DEFAULT (datetime('now')),
@@ -51,6 +52,12 @@ CREATE INDEX IF NOT EXISTS idx_projects_category ON projects(category);
 const sceneColumns = db.prepare(`PRAGMA table_info(scenes)`).all();
 if (!sceneColumns.some((c) => c.name === "scene_type")) {
   db.exec(`ALTER TABLE scenes ADD COLUMN scene_type TEXT DEFAULT 'content'`);
+}
+
+// 기존에 description 컬럼 없이 생성된 shorts.db가 있을 경우를 대비한 안전 마이그레이션
+const projectColumns = db.prepare(`PRAGMA table_info(projects)`).all();
+if (!projectColumns.some((c) => c.name === "description")) {
+  db.exec(`ALTER TABLE projects ADD COLUMN description TEXT`);
 }
 
 export default db;
