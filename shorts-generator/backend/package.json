@@ -1,0 +1,22 @@
+{
+  "name": "shorts-generator-backend",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "만약에 시리즈 유튜브 숏츠 자동 제작 로컬 백엔드",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "node --watch src/index.js",
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.0",
+    "@google/generative-ai": "^0.21.0",
+    "@google-cloud/text-to-speech": "^5.3.0",
+    "better-sqlite3": "^11.3.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0",
+    "fluent-ffmpeg": "^2.1.3",
+    "uuid": "^10.0.0"
+  }
+}

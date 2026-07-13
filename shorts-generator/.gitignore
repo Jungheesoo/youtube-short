@@ -1,0 +1,5 @@
+node_modules/
+.env
+backend/shorts.db
+backend/shorts.db-*
+backend/output/
