@@ -36,8 +36,14 @@ export async function synthesizeNarration(text, outputPath) {
 
   const [response] = await client.synthesizeSpeech({
     input: { ssml: toSSML(text) },
-    voice: { languageCode: "ko-KR", name: "ko-KR-Neural2-A" }, // 여성 보이스. Neural2 등급은 월 100만자까지 무료(2026-07 Cloud TTS pricing 페이지로 확인) — 원하는 보이스로 교체 가능
-    audioConfig: { audioEncoding: "MP3", speakingRate: 1.05 },
+    // 남성 보이스, Chirp3-HD 등급(Neural2보다 최신/자연스러움, 무료 한도는 Neural2와 동일하게 월
+    // 100만자 — 2026-07 Cloud TTS pricing 페이지로 확인). Neural2엔 남성 보이스가 "C" 하나뿐이라
+    // "더 중저음" 비교 대상이 없어서 Chirp3-HD로 등급을 올림. 정확한 음색(어느 게 제일 중저음인지)은
+    // 실제로 들어봐야 확인 가능 — 미검증. 남성 보이스 다른 후보: ko-KR-Chirp3-HD-Fenrir,
+    // ko-KR-Chirp3-HD-Enceladus, ko-KR-Chirp3-HD-Iapetus, ko-KR-Chirp3-HD-Orus (전부 listVoices API로
+    // 남성 확인됨, ffmpeg.js 관련 없음)
+    voice: { languageCode: "ko-KR", name: "ko-KR-Chirp3-HD-Charon" },
+    audioConfig: { audioEncoding: "MP3", speakingRate: 1.15 },
     enableTimePointing: ["SSML_MARK"], // word-level 타이밍이 필요하면 SSML <mark> 태그 활용 권장
   });
 

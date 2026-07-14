@@ -40,12 +40,12 @@ export default function TopicPage() {
 
   return (
     <div className="page">
-      <h1>오늘의 "만약에" 주제</h1>
+      <h1>오늘의 마음온도 주제</h1>
 
       <div className="topic-input">
         <input
           type="text"
-          placeholder='예: 만약 고려시대에 클럽에서 춤을 췄다면?'
+          placeholder="예: 걱정만 할수록 수명만 깎이는 이유"
           value={topic}
           onChange={(e) => setTopic(e.target.value)}
         />

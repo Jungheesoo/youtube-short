@@ -21,6 +21,11 @@ import { logError } from "../utils/logger.js";
 const router = Router();
 const OUTPUT_ROOT = path.join(process.cwd(), "output");
 
+// 모든 영상에 고정으로 쓰는 배경음악. "Lullaby" by JVNA (Happy Soul Music Library, 개인/상업적 무료
+// 이용 가능 — 단 아티스트 크레딧 표기 조건, 영상 설명란에 "Music: Lullaby by JVNA" 등으로 출처 표기 필요).
+// https://happysoulmusic.com/audio/lullaby_-_jvna-mp3/
+const DEFAULT_MUSIC_PATH = "C:\\Users\\PC2\\Downloads\\Lullaby - JVNA.mp3";
+
 // --- 1. 주제 추천 ---
 router.get("/topics/recommend", async (req, res) => {
   try {
@@ -148,7 +153,9 @@ router.post("/projects/:id/narration/complete", (req, res) => {
 // --- 6. 최종 합성 ---
 router.post("/projects/:id/render", async (req, res) => {
   const { id } = req.params;
-  const { musicPath, title } = req.body; // musicPath: Pixabay/유튜브 오디오 라이브러리 로컬 파일, title: 미지정 시 titleCandidates[0] 사용
+  // musicPath: 미지정 시 DEFAULT_MUSIC_PATH(모든 영상 공통 고정 배경음악) 사용, title: 미지정 시 titleCandidates[0] 사용
+  const { musicPath: requestedMusicPath, title } = req.body;
+  const musicPath = requestedMusicPath || DEFAULT_MUSIC_PATH;
   const workDir = path.join(OUTPUT_ROOT, id);
 
   try {

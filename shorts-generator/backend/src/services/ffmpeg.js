@@ -17,18 +17,19 @@ const OUT_W = 1080;
 const OUT_H = 1920;
 
 /**
- * 3분할 레이아웃 비율 (세이프존 반영).
- * 기기별 정확한 세이프존 픽셀 수치(노치/상태바, 유튜브 좋아요·댓글·공유 UI 등)는
- * 기종마다 달라 확정할 수 없음 — 비율 기반 여백으로 대응한다 (미검증, 화면 비율 기준 근사치).
+ * 2분할 레이아웃 비율.
+ * 채널 구독/설명/검색어 UI는 유튜브 자체 플레이어가 영상 밖에 그려주므로(영상 파일 안에는 없음),
+ * 영상에는 하단 브랜딩바를 별도로 만들지 않는다 — 제목바 아래는 이미지 영역이 끝까지 채운다.
+ * 기기별 정확한 세이프존 픽셀 수치(노치/상태바, 유튜브 좋아요·댓글·공유 UI 등)는 기종마다 달라
+ * 확정할 수 없음 — 비율 기반 여백으로 대응한다 (미검증, 화면 비율 기준 근사치).
  *
- * 0~15%   상단 제목바 (검은 배경, 고정)
- * 15~75%  이미지 영역 (레터박스 + 블러 배경 채움)
- * 75~100% 하단 브랜딩바 — 실제 콘텐츠(아이콘+채널명)는 75~85%에만, 85~100%는 완전히 비움
+ * 0~20%   상단 제목바 (검은 배경, 고정) — 아이폰 노치/유튜브 재생 컨트롤과 겹쳐 제목이 잘린다는
+ *          피드백으로 15%→20% 확장 (기기별 정확한 수치는 미검증)
+ * 20~100% 이미지 영역 (자르기 채움), 자막은 그 안쪽 하단부에 오버레이
  */
-const TOP_BAR_H = Math.round(OUT_H * 0.15); // 288
-const BOTTOM_BAR_H = Math.round(OUT_H * 0.25); // 480
+const TOP_BAR_H = Math.round(OUT_H * 0.2); // 384
 const IMG_REGION_W = OUT_W;
-const IMG_REGION_H = OUT_H - TOP_BAR_H - BOTTOM_BAR_H; // 1152
+const IMG_REGION_H = OUT_H - TOP_BAR_H; // 1632
 const RIGHT_SAFE_MARGIN = Math.round(OUT_W * 0.15); // 162 — 우측 유튜브 버튼 컬럼과 겹치지 않게
 
 function zoompanFilter(direction, durationSec, fps = 30, w = OUT_W, h = OUT_H) {
@@ -59,10 +60,11 @@ export function getAudioDuration(audioPath) {
 }
 
 /**
- * 이미지 1장 -> 3분할 레이아웃 캔버스(1080x1920)의 짧은 클립.
+ * 이미지 1장 -> 2분할 레이아웃 캔버스(1080x1920)의 짧은 클립.
  *
- * 이미지 영역(15~75%, 1080x1152)은 원본 이미지를 크롭해서 빈틈없이 꽉 채우고(레터박스/블러 없음),
- * Ken Burns 팬/줌 효과를 적용한다. 마지막에 상/하단 검은 바를 pad로 붙여 최종 1080x1920 캔버스를 만든다.
+ * 이미지 영역(15~100%, 1080x1632)은 원본 이미지를 크롭해서 빈틈없이 꽉 채우고(레터박스/블러 없음),
+ * Ken Burns 팬/줌 효과를 적용한다. 마지막에 상단 검은 바만 pad로 붙여 최종 1080x1920 캔버스를 만든다
+ * (하단 브랜딩바는 없음 — 유튜브 자체 UI가 영상 밖에서 담당).
  */
 export function imageToClip(imagePath, durationSec, outputPath, direction = pickDirection()) {
   const fps = 30;
@@ -74,7 +76,7 @@ export function imageToClip(imagePath, durationSec, outputPath, direction = pick
       IMG_REGION_W,
       IMG_REGION_H
     )}[img]`,
-    // 상/하단 검은 바 (고정 브랜딩바 자리)
+    // 상단 검은 바 (제목바 자리) — 하단은 이미지가 그대로 프레임 끝까지 채움
     `[img]pad=${OUT_W}:${OUT_H}:0:${TOP_BAR_H}:color=black[outv]`,
   ].join(";");
 
@@ -144,25 +146,6 @@ function wrapTitleForAss(title, maxCharsPerLine = 8) {
   return `${escapeAssText(line1)}\\N${escapeAssText(line2)}`;
 }
 
-/** 원(재생버튼 배경) - 4개의 3차 베지어 곡선으로 근사한 표준 기법. 로컬 좌표계는 \pos 기준 (0,0)~(iconSize,iconSize) */
-function buildCircleDrawPath(iconSize) {
-  const r = iconSize / 2;
-  const k = Math.round(r * 0.5523);
-  const near = r - k;
-  const far = r + k;
-  return `m ${r} 0 b ${far} 0 ${iconSize} ${near} ${iconSize} ${r} b ${iconSize} ${far} ${far} ${iconSize} ${r} ${iconSize} b ${near} ${iconSize} 0 ${far} 0 ${r} b 0 ${near} ${near} 0 ${r} 0`;
-}
-
-/** 재생버튼 삼각형(자체 제작 아이콘 — 유튜브 로고 아님) */
-function buildTriangleDrawPath(iconSize) {
-  const ax = Math.round(iconSize * 0.32);
-  const ay = Math.round(iconSize * 0.25);
-  const by = Math.round(iconSize * 0.75);
-  const cx = Math.round(iconSize * 0.72);
-  const cy = Math.round(iconSize / 2);
-  return `m ${ax} ${ay} l ${ax} ${by} l ${cx} ${cy}`;
-}
-
 /**
  * .ass 자막 파일 생성 (drawtext보다 스타일링/줄바꿈 처리가 쉬움).
  * timings: [{ text, startSec, endSec }] — 이미지 영역 안쪽 하단(55~70% 지점)에 나레이션 자막으로 번인.
@@ -174,7 +157,7 @@ function buildTriangleDrawPath(iconSize) {
 export function generateAssSubtitle(
   timings,
   outputPath,
-  { title, channelName = "상상채굴단", totalDurationSec } = {}
+  { title, totalDurationSec } = {}
 ) {
   const toAssTime = (s) => {
     const h = Math.floor(s / 3600);
@@ -185,11 +168,13 @@ export function generateAssSubtitle(
 
   const endSec = totalDurationSec ?? (timings.length ? timings[timings.length - 1].endSec : 0);
 
-  // 캡션(나레이션 자막): 이미지 영역(15~75%) 안쪽, 화면 하단 기준 70% 지점에 텍스트 하단이 오도록
-  // MarginV 계산 — 화면 최하단 25%(하단 브랜딩바 세이프존) 안으로는 내려가지 않는다.
+  // 캡션(나레이션 자막): 이미지 영역(15~100%) 안쪽, 화면 하단 기준 70% 지점에 텍스트 하단이 오도록
+  // MarginV 계산 — 화면 최하단부는 모바일 유튜브 자체 UI(좋아요/댓글/채널 정보 등)가 겹칠 수 있는
+  // 영역이라 여유를 둔다.
   const captionMarginV = Math.round(OUT_H - OUT_H * 0.7); // 576
-  // 상단바 제목: 화면 최상단에서 최소 3% 아래부터 시작
-  const titleMarginV = Math.round(OUT_H * 0.03); // 58
+  // 상단바 제목: 아이폰 노치/유튜브 재생 컨트롤 아이콘과 겹쳐 첫 줄이 잘린다는 실사용 피드백으로
+  // 여백을 3%→7%로 늘림 (기기별 정확한 세이프존 수치는 미검증 — 비율 기반 여백으로 대응)
+  const titleMarginV = Math.round(OUT_H * 0.07); // 134
   // 제목/자막을 화면 중앙에 오도록 좌우 마진을 동일하게(RIGHT_SAFE_MARGIN 기준) — 우측 세이프존도 함께 만족
   const centeredMargin = RIGHT_SAFE_MARGIN;
 
@@ -199,11 +184,9 @@ PlayResX: ${OUT_W}
 PlayResY: ${OUT_H}
 
 [V4+ Styles]
-Format: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, BackColour, Bold, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV
-Style: Caption,NanumSquareRound Bold,68,&H0000FFFF,&H00000000,&H00000000,1,1,5,2,2,${centeredMargin},${centeredMargin},${captionMarginV}
-Style: Title,NanumSquareRound Bold,80,&H0000FFFF,&H00000000,&H00000000,1,1,5,2,8,${centeredMargin},${centeredMargin},${titleMarginV}
-Style: Channel,NanumSquareRound Bold,66,&H00FFFFFF,&H00000000,&H00000000,1,1,3,1,7,0,0,0
-Style: Icon,NanumSquareRound Bold,10,&H00FFFFFF,&H00000000,&H00000000,1,1,0,0,7,0,0,0
+Format: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, BackColour, Bold, Italic, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV
+Style: Caption,Noto Sans KR Black,68,&H0000FFFF,&H00000000,&H00000000,1,1,1,5,2,2,${centeredMargin},${centeredMargin},${captionMarginV}
+Style: Title,Noto Sans KR Black,80,&H0000FFFF,&H00000000,&H00000000,1,1,1,5,2,8,${centeredMargin},${centeredMargin},${titleMarginV}
 
 [Events]
 Format: Layer, Start, End, Style, Text
@@ -222,33 +205,8 @@ Format: Layer, Start, End, Style, Text
   // 하단 브랜딩바: 실제 콘텐츠(아이콘+채널명)는 75~85% 구간에만 배치, 85~100%는 완전히 비워둔다
   // (유튜브 좋아요/댓글/공유/채널설명 UI가 겹치는 세이프존). 기기별 정확한 픽셀 수치는 미검증 —
   // 비율 기반 여백으로 대응.
-  const bandTop = OUT_H * 0.75;
-  const bandBottom = OUT_H * 0.85;
-  const iconSize = 90;
-  const iconGap = 24;
-  const channelFontSize = 66;
-  // 채널명 텍스트 폭을 정확히 측정할 폰트 라이브러리가 없어, 한글(CJK) 글자는 대략 정사각형이라는
-  // 근사치로 폭을 추정해 아이콘+텍스트를 그룹으로 화면 중앙에 배치한다 (미검증 근사값 — 채널명이
-  // 바뀌거나 실제 폰트 렌더링과 차이가 크면 좌우 위치를 눈으로 보고 조정 필요).
-  const estimatedTextWidth = Math.round(channelName.length * channelFontSize * 0.95);
-  const groupWidth = iconSize + iconGap + estimatedTextWidth;
-  const iconLeft = Math.round((OUT_W - groupWidth) / 2);
-  const iconTop = Math.round(bandTop + (bandBottom - bandTop - iconSize) / 2);
-
-  lines.push(
-    `Dialogue: 0,${toAssTime(0)},${toAssTime(endSec)},Icon,{\\an7\\pos(${iconLeft},${iconTop})\\p1\\bord0\\1c&H1E1EE0&}${buildCircleDrawPath(iconSize)}`
-  );
-  lines.push(
-    `Dialogue: 1,${toAssTime(0)},${toAssTime(endSec)},Icon,{\\an7\\pos(${iconLeft},${iconTop})\\p1\\bord0\\1c&HFFFFFF&}${buildTriangleDrawPath(iconSize)}`
-  );
-
-  const channelX = iconLeft + iconSize + iconGap;
-  const channelY = iconTop + Math.round(iconSize / 2);
-  lines.push(
-    `Dialogue: 1,${toAssTime(0)},${toAssTime(endSec)},Channel,{\\an4\\pos(${channelX},${channelY})}${escapeAssText(
-      channelName
-    )}`
-  );
+  // 재생버튼 아이콘 + 채널명은 "구독 요구" 느낌이 감동을 깰 수 있다는 피드백으로 제거함.
+  // 하단 25% 세이프존(검은 바) 자체는 유튜브 UI 겹침 방지 목적이라 그대로 유지 (imageToClip의 pad).
 
   fs.writeFileSync(outputPath, header + lines.join("\n"));
   return outputPath;

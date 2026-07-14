@@ -12,7 +12,7 @@ export default function Sidebar() {
 
   return (
     <aside className="sidebar">
-      <h2>만약에 시리즈</h2>
+      <h2>마음온도</h2>
       <nav>
         {STEPS.map((step) => {
           const path = typeof step.path === "function" ? (id ? step.path(id) : "#") : step.path;

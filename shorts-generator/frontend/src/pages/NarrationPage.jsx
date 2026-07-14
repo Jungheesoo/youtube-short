@@ -59,13 +59,10 @@ export default function NarrationPage() {
             <span>#{scene.scene_order + 1}</span>
             {scene.scene_type === "outro" && <span className="outro-badge">아웃트로</span>}
             <p>{scene.narration}</p>
-            {scene.audio_path ? (
-              <audio controls src={toOutputUrl(scene.audio_path)} />
-            ) : (
-              <button disabled={generating === scene.id} onClick={() => generateOne(scene.id)}>
-                {generating === scene.id ? "생성 중..." : "생성"}
-              </button>
-            )}
+            {scene.audio_path && <audio controls src={toOutputUrl(scene.audio_path)} />}
+            <button disabled={generating === scene.id} onClick={() => generateOne(scene.id)}>
+              {generating === scene.id ? "생성 중..." : scene.audio_path ? "다시 생성" : "생성"}
+            </button>
           </li>
         ))}
       </ul>
