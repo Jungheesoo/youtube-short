@@ -42,15 +42,16 @@ router.post("/projects", async (req, res) => {
     const projectId = uuid();
 
     db.prepare(
-      `INSERT INTO projects (id, topic, category, status, script_json, title_candidates, description)
-       VALUES (?, ?, ?, 'script_done', ?, ?, ?)`
+      `INSERT INTO projects (id, topic, category, status, script_json, title_candidates, description, style_guide)
+       VALUES (?, ?, ?, 'script_done', ?, ?, ?, ?)`
     ).run(
       projectId,
       topic,
       category || null,
       JSON.stringify(script),
       JSON.stringify(script.titleCandidates),
-      script.description || null
+      script.description || null,
+      script.styleGuide || null
     );
 
     const insertScene = db.prepare(
@@ -147,10 +148,13 @@ router.post("/projects/:id/narration/complete", (req, res) => {
 // --- 6. 최종 합성 ---
 router.post("/projects/:id/render", async (req, res) => {
   const { id } = req.params;
-  const { musicPath } = req.body; // Pixabay/유튜브 오디오 라이브러리에서 다운로드한 로컬 파일 경로
+  const { musicPath, title } = req.body; // musicPath: Pixabay/유튜브 오디오 라이브러리 로컬 파일, title: 미지정 시 titleCandidates[0] 사용
   const workDir = path.join(OUTPUT_ROOT, id);
 
   try {
+    const project = getProject(id);
+    if (!project) return res.status(404).json({ error: "프로젝트를 찾을 수 없습니다." });
+
     const scenes = getScenes(id);
     const missing = scenes.filter((s) => !s.image_path || !s.audio_path);
     if (missing.length > 0) {
@@ -191,8 +195,18 @@ router.post("/projects/:id/render", async (req, res) => {
       cursor += duration;
       return t;
     });
+    // 상단바 제목: 요청에서 override가 없으면 titleCandidates[0].title 사용
+    // (title_candidates는 { title, hashtags } 객체 배열 — 작업 9)
+    let titleCandidates = [];
+    try {
+      titleCandidates = JSON.parse(project.title_candidates || "[]");
+    } catch {
+      titleCandidates = [];
+    }
+    const barTitle = title || titleCandidates[0]?.title || project.topic;
+
     const assPath = path.join(workDir, "subtitles.ass");
-    generateAssSubtitle(timings, assPath);
+    generateAssSubtitle(timings, assPath, { title: barTitle, totalDurationSec: cursor });
 
     const finalPath = path.join(workDir, "final.mp4");
     await finalizeWithSubtitlesAndMusic(concatenated, assPath, musicPath, finalPath);

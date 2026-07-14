@@ -110,6 +110,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
   background: #1c1c22; border: 1px solid #2a2a30; border-radius: 8px; padding: 10px 12px; font-size: 14px;
 }
+.title-candidate-list .hashtags { color: #818cf8; font-size: 13px; }
 .description-box {
   background: #1c1c22; border: 1px solid #2a2a30; border-radius: 8px; padding: 12px;
 }

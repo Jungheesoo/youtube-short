@@ -112,14 +112,22 @@ export default function RenderPage() {
           <div className="upload-meta">
             <h3>제목 후보</h3>
             <ul className="title-candidate-list">
-              {titleCandidates.map((title, i) => (
-                <li key={i}>
-                  <span>{title}</span>
-                  <button onClick={() => copyText(`title-${i}`, title)}>
-                    {copied === `title-${i}` ? "복사됨!" : "복사"}
-                  </button>
-                </li>
-              ))}
+              {titleCandidates.map((candidate, i) => {
+                const fullText = [candidate.title, ...(candidate.hashtags || [])].join(" ");
+                return (
+                  <li key={i}>
+                    <span>
+                      {candidate.title}
+                      {candidate.hashtags?.length > 0 && (
+                        <span className="hashtags"> {candidate.hashtags.join(" ")}</span>
+                      )}
+                    </span>
+                    <button onClick={() => copyText(`title-${i}`, fullText)}>
+                      {copied === `title-${i}` ? "복사됨!" : "복사"}
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
 
             <h3>설명</h3>

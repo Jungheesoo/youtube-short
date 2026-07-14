@@ -36,7 +36,7 @@ export async function synthesizeNarration(text, outputPath) {
 
   const [response] = await client.synthesizeSpeech({
     input: { ssml: toSSML(text) },
-    voice: { languageCode: "ko-KR", name: "ko-KR-Neural2-C" }, // 원하는 보이스로 교체 가능
+    voice: { languageCode: "ko-KR", name: "ko-KR-Neural2-A" }, // 여성 보이스. Neural2 등급은 월 100만자까지 무료(2026-07 Cloud TTS pricing 페이지로 확인) — 원하는 보이스로 교체 가능
     audioConfig: { audioEncoding: "MP3", speakingRate: 1.05 },
     enableTimePointing: ["SSML_MARK"], // word-level 타이밍이 필요하면 SSML <mark> 태그 활용 권장
   });

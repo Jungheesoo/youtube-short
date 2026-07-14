@@ -1,22 +1,29 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api/client.js";
 
 export default function TopicPage() {
   const [topic, setTopic] = useState("");
   const [recommendations, setRecommendations] = useState([]);
-  const [loadingRec, setLoadingRec] = useState(true);
+  const [loadingRec, setLoadingRec] = useState(false);
+  const [hasRequestedRec, setHasRequestedRec] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState(null);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    api
-      .recommendTopics()
-      .then((data) => setRecommendations(data.topics))
-      .catch((e) => setError(e.message))
-      .finally(() => setLoadingRec(false));
-  }, []);
+  async function handleRecommend() {
+    setLoadingRec(true);
+    setError(null);
+    setHasRequestedRec(true);
+    try {
+      const data = await api.recommendTopics();
+      setRecommendations(data.topics);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoadingRec(false);
+    }
+  }
 
   async function handleCreate(selectedTopic, category) {
     setCreating(true);
@@ -48,8 +55,15 @@ export default function TopicPage() {
       </div>
 
       <h2>Claude 추천 주제</h2>
-      {loadingRec && <p>추천 주제 불러오는 중...</p>}
+      <p className="tip">버튼을 누르면 그때 Claude API를 호출해서 추천을 받아옵니다 (페이지 진입만으로는 호출되지 않음).</p>
+      <button onClick={handleRecommend} disabled={loadingRec}>
+        {loadingRec ? "추천 받는 중..." : hasRequestedRec ? "다시 추천받기" : "주제 추천받기"}
+      </button>
       {error && <p className="error">{error}</p>}
+
+      {hasRequestedRec && !loadingRec && recommendations.length === 0 && !error && (
+        <p>추천할 주제가 없습니다.</p>
+      )}
 
       <div className="recommend-grid">
         {recommendations.map((rec, i) => (
