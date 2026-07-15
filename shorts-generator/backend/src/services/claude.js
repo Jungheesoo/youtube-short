@@ -4,21 +4,44 @@ import { getRecentCategories, getAllPastTopics } from "../db/queries.js";
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const MODEL = "claude-sonnet-4-6"; // 필요시 opus로 교체 가능
 
-// "마음온도" 채널의 고정 렌더링 방식 — 부드러운 수채화 톤의 일러스트풍(사실적 사진 아님).
-// 특정 스튜디오/작가 이름은 상표·저작권 리스크로 프롬프트에 넣지 않고, 원하는 시각적 특징만
-// 일반적인 화풍 묘사로 담았다. 아직 실사용 반복 검증 전 — 실제 나노바나나 결과 보고 조정 필요.
-export const ILLUSTRATION_STYLE = `hand-painted watercolor storybook illustration style, soft visible watercolor texture and gentle color bleeding, warm natural sunlight, painterly nature backgrounds with lush greenery and soft clouds, gentle rounded character designs with simple expressive faces, semi-realistic but clearly hand-illustrated (not a photograph), soft muted warm color palette, delicate linework, not a flat vector cartoon, not anime, not a comic book, not 3D render, not a photorealistic photograph, nostalgic and heartwarming mood, consistent illustrated character rendering`;
+// "마음온도" 채널의 고정 화풍 — 모든 영상, 모든 씬에 항상 동일하게 적용된다.
+// 주제(시대/장르)에 따라 화풍 자체를 바꾸는 로직은 두지 않음 — 매번 이 문구 하나만 사용.
+export const STORYBOOK_STYLE = `soft watercolor and colored-pencil illustration, hand-painted texture with visible brushstrokes, warm pastel color palette, gentle diffused natural lighting, detailed painterly background elements, whimsical storybook atmosphere, nostalgic countryside mood, 2D hand-drawn animation cel style`;
+
+// 인물 구도 고정 지시 — 인물이 항상 화면에 크게 나오도록.
+export const COMPOSITION_RULE = `The subject must be shot as a medium shot / close-up, filling roughly half to two-thirds of the frame from waist-up, with a clearly visible face and posture. The background should be softly blurred, with the subject in sharp focus. Avoid wide landscape shots where the person appears small in the frame.`;
+
+// 씬 상황(시간대)에 맞는 색감 — Claude는 이 중 하나의 키(timeOfDay)만 고르고,
+// 실제 색감 문구는 백엔드가 붙인다 (출력 토큰 절약 + 색감 문구 일관성 확보).
+export const TIME_OF_DAY_PALETTE = {
+  dawn: "soft blue-violet dawn light, faint pink horizon, cool muted tones",
+  day: "bright warm sunlight, clear soft blue sky, vivid but gentle colors",
+  sunset: "warm golden hour lighting, soft orange-pink sky, long soft shadows",
+  night: "deep indigo night sky, warm interior lamp glow, soft moonlight",
+  overcast: "overcast soft diffused light, muted cool grays and blues, gentle misty atmosphere",
+};
+
+// 장소 다양화 지시 — 매번 집/실내로만 흐르지 않도록.
+export const LOCATION_VARIETY_RULE = `Vary the location/setting across different videos (e.g., café, public transit, park, office, home, street, library) rather than defaulting to home/indoor scenes every time. Choose a location that fits the narration's emotional context.`;
+
+// SNS 비교 장면에서 실제 앱 UI/로고를 재현하지 않도록 하는 지시.
+export const COMPARISON_VISUAL_RULE = `When a scene involves a person looking at their phone and feeling compared to others (e.g., social media scrolling), the phone screen should show soft, blurred, unreadable colorful shapes suggesting vibrant photos or smiling faces — implying social media content without rendering any real app UI, logos, text, or readable content.`;
+
+// 나레이션 구조 지시 — 2인칭 도입 + 3막 감정 구조.
+export const NARRATION_STRUCTURE_RULE = `The narration must open in second person (addressing the viewer directly) to maximize immediate emotional relatability. The overall scene structure must follow a 3-act emotional arc: (1) relatable struggle/discomfort, (2) a quiet turning point or realization, (3) a hopeful, resonant resolution — avoid resolving the emotion too early in the sequence.`;
 
 // 세로 화면 비율 고정 지시 (모든 imagePrompt 끝에 공통 삽입)
 export const VERTICAL_SUFFIX = `vertical 9:16 portrait orientation, mobile phone screen aspect ratio`;
 
 /**
- * 비용 최적화: ILLUSTRATION_STYLE/VERTICAL_SUFFIX는 매 씬마다 Claude가 "출력"하지 않고
- * (출력 토큰 비용 절감), Claude 응답을 받은 뒤 이 함수에서 문자열 결합으로 완성한다.
- * Claude는 장면 묘사(sceneDescription)만 생성.
+ * 비용 최적화: 아래 고정 상수들은 매 씬마다 Claude가 "출력"하지 않고 (출력 토큰 비용 절감),
+ * Claude 응답을 받은 뒤 이 함수에서 문자열 결합으로 완성한다.
+ * Claude는 장면 묘사(sceneDescription)와 씬별 timeOfDay 키만 생성.
+ * 최종 구조: [장면 묘사] + [COMPOSITION_RULE] + [해당 timeOfDay 색감] + [STORYBOOK_STYLE] + [VERTICAL_SUFFIX]
  */
-function buildImagePrompt(sceneDescription, styleGuide) {
-  return [sceneDescription, styleGuide, ILLUSTRATION_STYLE, VERTICAL_SUFFIX].filter(Boolean).join(", ");
+function buildImagePrompt(sceneDescription, timeOfDay) {
+  const palette = TIME_OF_DAY_PALETTE[timeOfDay] || TIME_OF_DAY_PALETTE.day;
+  return [sceneDescription, COMPOSITION_RULE, palette, STORYBOOK_STYLE, VERTICAL_SUFFIX].filter(Boolean).join(", ");
 }
 
 /**
@@ -26,15 +49,7 @@ function buildImagePrompt(sceneDescription, styleGuide) {
  * scenes: [{ narration, imagePrompt, durationSec }]
  * 이미지 프롬프트까지 여기서 같이 만들어서 스타일 일관성을 확보한다.
  */
-export async function generateScript(topic, { styleGuide: forcedStyleGuide } = {}) {
-  const styleInstruction = forcedStyleGuide
-    ? `- styleGuide 필드에는 반드시 아래 스타일 문구를 그대로 사용해: "${forcedStyleGuide}"`
-    : `- styleGuide 필드: 렌더링 매체(일러스트풍)는 고정이고 백엔드가 자동으로 붙이니 여기서 다시 언급하지 마.
-  styleGuide에는 이번 주제/분위기에 맞는 "색감 톤·시간대·장소 배경"만 영어로 직접 지어내(매번 다르게).
-  예: 위로가 필요한 이야기 → 따뜻한 노을빛 색감, 조용한 골목/카페 배경 (예: "warm golden-hour tones, quiet cozy cafe or alley setting")
-      단호한 깨달음/통찰 이야기 → 차분한 새벽빛 색감, 정돈된 실내 배경 (예: "calm cool dawn tones, tidy minimal indoor setting")
-  주제 분위기에 맞는 톤을 새로 지어내되, 한 영상 안에서는 이 톤을 일관되게 유지해.`;
-
+export async function generateScript(topic) {
   const system = `너는 유튜브 쇼츠 채널 "마음온도"의 전속 작가야. "마음온도"는 인생 지혜·공감 에세이 숏츠 채널로,
 역설적이거나 곱씹게 되는 한 줄 통찰로 시작해서, 공감 가는 일상 이야기로 풀어가고, 여운 있는 마무리로 끝나는
 포맷이야 (예: "'걱정'만 할수록 수명만 깎인다").
@@ -48,14 +63,15 @@ export async function generateScript(topic, { styleGuide: forcedStyleGuide } = {
     { "title": "제목3", "hashtags": ["#마음온도", "#에세이", "#오늘의한마디"] }
   ],
   "description": "유튜브 설명란에 들어갈 텍스트",
-  "styleGuide": "이번 영상 전체에 쓸 색감/배경 톤 영어 문구",
   "scenes": [
-    { "narration": "나레이션 텍스트", "sceneDescription": "장면 묘사만 담은 영어 문장(스타일/화질/카메라/비율 문구 없이)", "durationSec": 4, "sceneType": "content" }
+    { "narration": "나레이션 텍스트", "sceneDescription": "장면 묘사만 담은 영어 문장(스타일/화질/카메라/비율 문구 없이)", "timeOfDay": "day", "durationSec": 4, "sceneType": "content" }
   ]
 }
 
 규칙:
-- title은 "'걱정'만 할수록 수명만 깎인다" 같은 역설적/통찰적 한 줄 형태로, 15자 내외로 짧고 강하게
+- title은 "'걱정'만 할수록 수명만 깎인다" 같은 역설적/통찰적 한 줄 형태, 또는 "자존감 높은 사람들의 작은 습관"
+  "마음이 따뜻한 사람과 그렇지 않은 사람의 차이"처럼 비교·습관형 한 줄 형태 중 주제에 맞는 쪽으로, 15자 내외로 짧고 강하게.
+  비교·습관형이어도 재테크/성공 지향적 자극이 아니라 자존감·마음온도를 높이는 방향으로 귀결되게 할 것
 - description은 2~3문장으로 영상 내용을 요약하고 공감을 유발한 뒤, 마지막 줄에 관련 해시태그 4~5개(#인생조언 #좋은글 #명언 등, 주제에 맞게)를 추가
 - titleCandidates의 각 항목은 { "title", "hashtags" } 객체. hashtags는 항상 정확히 3개, 유튜브/인스타 등 플랫폼 구분 없이 동일하게 사용:
   1) "#마음온도" (채널 고정, 항상 포함)
@@ -63,12 +79,16 @@ export async function generateScript(topic, { styleGuide: forcedStyleGuide } = {
   3) 대본 내용에 맞는 감정 태그 1개를 매번 다르게 생성 (예: "#위로가필요할때", "#공감백배", "#오늘의한마디" 등)
   title 자체에는 해시태그를 넣지 말고, hashtags 배열에만 담아
 - 본편(content) 씬은 6~9개, 전체 40~55초 분량. 그 뒤에 아웃트로(outro) 씬을 정확히 1개 추가해서 scenes 배열 맨 마지막에 넣어 (총 7~10개 씬).
-${styleInstruction}
-- sceneDescription은 반드시 그 씬의 narration이 실제로 말하는 내용을 시각적으로 옮겨야 함(narration과 무관하게 일반적이거나 추상적인 장면을 넣지 마). narration이 특정 인물/행동을 이야기하면 그 인물/행동을 그리고, 특정 장소·사물·개념을 이야기하면 그 배경·사물을 그려서 — 나레이션을 들으며 봤을 때 "지금 이 얘기를 하고 있구나"가 바로 느껴지게 구성할 것. 인물의 표정/동작/구도, 배경 소품 등 "장면 내용"만 영어로 작성해. 렌더링 방식(일러스트풍 등), 화질/카메라 관련 문구, 화면 비율 지시는 절대 포함하지 마 — 이건 백엔드 코드가 styleGuide와 함께 자동으로 이어붙인다.
+- 화풍(일러스트 렌더링 방식)은 모든 씬에 고정이라 백엔드가 자동으로 붙이니 sceneDescription에 언급하지 마. 대신 timeOfDay 필드에 그 씬 상황에 맞는 시간대를 아래 5개 키 중 하나로 정확히 골라: "dawn"(새벽), "day"(낮), "sunset"(노을), "night"(밤), "overcast"(흐린 날). 색감 문구는 백엔드가 이 키에 맞춰 자동 삽입하니 sceneDescription에 색감/조명 문구를 직접 쓰지 마.
+- 장소 다양화: ${LOCATION_VARIETY_RULE}
+- sceneDescription은 반드시 그 씬의 narration이 실제로 말하는 내용을 시각적으로 옮겨야 함(narration과 무관하게 일반적이거나 추상적인 장면을 넣지 마). narration이 특정 인물/행동을 이야기하면 그 인물/행동을 그리고, 특정 장소·사물·개념을 이야기하면 그 배경·사물을 그려서 — 나레이션을 들으며 봤을 때 "지금 이 얘기를 하고 있구나"가 바로 느껴지게 구성할 것. 인물의 표정/동작/구도, 배경 소품 등 "장면 내용"만 영어로 작성해. 렌더링 방식(일러스트풍 등), 구도, 화질/카메라 관련 문구, 화면 비율 지시는 절대 포함하지 마 — 이건 백엔드 코드가 자동으로 이어붙인다.
+- 인물이 휴대폰으로 SNS를 보며 남과 비교하는 장면: ${COMPARISON_VISUAL_RULE}
 - 실존 인물 실명/딥페이크 묘사 금지, 대신 '한 여성', '한 남성', '한 노부부', '한 청년' 등 익명 표현으로 묘사. 이 채널은 다양한 나이·성별의 인물이 등장하는 공감형 에세이이므로, 이야기 내용에 맞는 인물을 자유롭게 설정해(주인공 성별을 고정하지 않음)
+- sceneDescription(영어)에 인물이 등장하면 반드시 한국인으로 명시해서 묘사할 것 (예: "a Korean woman", "a Korean man", "an elderly Korean couple", "a Korean office worker" 등 — "a woman", "a man"처럼 인종 묘사 없이 쓰지 말 것). 인물이 없는 씬(사물/풍경만)에는 이 표현을 넣지 마
 - 나레이션이 "친구", "부모님", "그 사람"처럼 구체적인 인물/관계를 직접 언급하는 씬은 그 인물이 sceneDescription에 반드시 등장해야 함(빈 책상/사물만 보여주는 상징적 연출은 그 씬의 나레이션이 인물을 직접 언급하지 않을 때만 사용). 나레이션이 순수하게 개념/통계/장소만 이야기하는 씬만 인물 없이 사물/풍경으로 구성해도 됨
 - 옷차림/소품은 그 씬의 상황(시간대, 장소, 방금 하던 행동)에 논리적으로 맞아야 함. "casual home wear", "comfortable clothes" 같은 모호한 표현은 이미지 생성 AI가 아무렇게나 해석해버리므로 절대 쓰지 말고, 반드시 구체적인 옷 종류를 명시할 것
 - 선정적 표현이나 신체 노출/강조 구도는 금지 — 이 채널은 잔잔하고 담백한 톤이 핵심. 광고주 친화성(YPP 심사 통과, 노란 딱지 리스크)을 항상 고려
+- 나레이션 구조: ${NARRATION_STRUCTURE_RULE} (2인칭 도입은 첫 씬 narration에 적용, 3막 구조는 전체 본편 씬에 걸쳐 적용)
 - 모든 narration 문장은 "~요", "~습니다/입니다", "~하시나요?" 같은 존댓말/구어체 종결어미를 쓰지 말고,
   "~다", "~였다", "~한다", "~없다" 같은 서술체(다큐멘터리 내레이터 톤)로 끝낼 것.
   예: "초라해진 적 있으신가요?" (X) → "초라해진 적이 있다" (O), "괜찮습니다" (X) → "괜찮다" (O)
@@ -109,15 +129,24 @@ ${styleInstruction}
 
   script.scenes = (script.scenes || []).map((s) => ({
     ...s,
-    imagePrompt: buildImagePrompt(s.sceneDescription, script.styleGuide),
+    imagePrompt: buildImagePrompt(s.sceneDescription, s.timeOfDay),
   }));
 
   return script;
 }
 
+// "마음온도" 채널의 감정 카테고리 로테이션 — 특정 소재가 아니라 에세이가 주는 감정적 효용 기준.
+// recommendTopics는 최근 14일간 덜 다뤄진 카테고리를 우선 추천하도록 이 목록을 참고한다.
+export const EMOTION_CATEGORIES = [
+  "마음의 온도가 올라가는 이야기",
+  "자존감을 찾아가는 이야기",
+  "주변 사람을 돌보는 이야기",
+  "성장과 통찰을 주는 이야기",
+];
+
 /**
  * 최근 제작 이력을 바탕으로 오늘의 추천 주제 3개 생성.
- * 예: 최근 다룬 감정/소재와 겹치지 않는 새로운 인생 지혜 소재 우선 추천
+ * 예: 최근 다룬 감정 카테고리와 겹치지 않는 새로운 인생 지혜 소재 우선 추천
  */
 export async function recommendTopics() {
   const recentCategories = getRecentCategories(14);
@@ -125,10 +154,25 @@ export async function recommendTopics() {
 
   const msg = await client.messages.create({
     model: MODEL,
-    max_tokens: 500,
+    // 카테고리 로테이션 지시 + reason 문구가 길어져 기존 500으로는 응답이 잘릴 수 있어 상향.
+    max_tokens: 1024,
     system: `너는 "마음온도" 채널(인생 지혜·공감 에세이 유튜브 쇼츠)의 기획자야. 최근 제작 이력을 참고해서
-겹치지 않는 새로운 주제 3개를 추천해. 반드시 아래 JSON 배열 형식으로만 응답해:
-[{ "topic": "...", "category": "...", "reason": "왜 지금 추천하는지 한 줄" }]`,
+겹치지 않는 새로운 주제 3개를 추천해.
+
+이 채널의 감정 카테고리는 정확히 아래 4개뿐이야. 매 추천마다 category 필드는 반드시 이 중 하나를 그대로 사용해:
+${EMOTION_CATEGORIES.map((c) => `- "${c}"`).join("\n")}
+
+최근 14일 카테고리 사용 현황(아래 user 메시지의 집계)을 보고, 사용 빈도가 낮거나 아예 없는 카테고리를 우선
+추천해서 4개 카테고리가 골고루 로테이션되도록 해. 다만 카테고리 균형만 맞추려고 억지로 주제를 짜내지 말고,
+그 카테고리에 자연스럽게 맞는 공감형 소재를 골라.
+
+소재 유형: 순수 서사형("어떤 하루가 있었다") 소재뿐 아니라, "~하는 사람과 ~하지 않는 사람의 차이",
+"자존감이 높은 사람들의 작은 습관", "마음이 따뜻한 사람들의 공통점" 같은 비교·습관형 소재도 적극 섞어서 추천해.
+단, 이 채널은 재테크/자기계발 서적 판매 채널이 아니므로 "부자 되는 법", "성공하는 법" 같은 물질적 성공·자극적
+후킹은 쓰지 말고, 항상 자존감을 높여주거나 마음의 온도를 실제로 높여주는(따뜻해지는) 방향으로 귀결되게 해.
+
+반드시 아래 JSON 배열 형식으로만 응답해. 다른 텍스트, 설명, 마크다운 코드블록 없이 순수 JSON만 출력해:
+[{ "topic": "...", "category": "...", "reason": "왜 지금 이 카테고리/주제를 추천하는지 한 줄(최근 사용 빈도 언급 포함)" }]`,
     messages: [
       {
         role: "user",
@@ -140,5 +184,14 @@ export async function recommendTopics() {
 
   const text = msg.content.find((b) => b.type === "text")?.text ?? "[]";
   const cleaned = text.replace(/```json|```/g, "").trim();
-  return JSON.parse(cleaned);
+  try {
+    return JSON.parse(cleaned);
+  } catch (e) {
+    // stop_reason이 "max_tokens"면 응답이 잘려서 JSON이 깨진 것 — 원본 텍스트를 에러 메시지에
+    // 남겨서 error.log에서 바로 원인을 확인할 수 있게 한다 (Anthropic Messages API의 stop_reason
+    // 필드는 공식 문서로 확인된 값: end_turn/max_tokens/stop_sequence/tool_use).
+    throw new Error(
+      `recommendTopics JSON 파싱 실패 (stop_reason: ${msg.stop_reason}): ${e.message}\n원본 응답: ${cleaned.slice(0, 1500)}`
+    );
+  }
 }

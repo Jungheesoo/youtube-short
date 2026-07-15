@@ -21,10 +21,12 @@ import { logError } from "../utils/logger.js";
 const router = Router();
 const OUTPUT_ROOT = path.join(process.cwd(), "output");
 
-// 모든 영상에 고정으로 쓰는 배경음악. "Lullaby" by JVNA (Happy Soul Music Library, 개인/상업적 무료
-// 이용 가능 — 단 아티스트 크레딧 표기 조건, 영상 설명란에 "Music: Lullaby by JVNA" 등으로 출처 표기 필요).
-// https://happysoulmusic.com/audio/lullaby_-_jvna-mp3/
-const DEFAULT_MUSIC_PATH = "C:\\Users\\PC2\\Downloads\\Lullaby - JVNA.mp3";
+// 채널 고정 테마곡 — 모든 영상에 항상 동일한 곡을 사용한다.
+// 현재 파일명("soundgalleryby-emotional-cinematic-background-piano-inspirational-orchestral-music-115915")
+// 으로 미루어 SoundGallery 계열 스톡 음원으로 보이나 실제 라이선스 조건(크레딧 표기 의무 등)은 미검증 —
+// 출처 페이지에서 라이선스를 직접 확인하고, 크레딧 표기가 필요하면 영상 설명란/고정 댓글에 직접 추가할 것
+// (코드가 자동으로 넣어주지 않음).
+const MUSIC_PATH = path.join(process.cwd(), "assets/music/theme_music.mp3");
 
 // --- 1. 주제 추천 ---
 router.get("/topics/recommend", async (req, res) => {
@@ -56,7 +58,7 @@ router.post("/projects", async (req, res) => {
       JSON.stringify(script),
       JSON.stringify(script.titleCandidates),
       script.description || null,
-      script.styleGuide || null
+      null // style_guide: 화풍은 STORYBOOK_STYLE로 고정, 더 이상 씬별로 생성하지 않음 (claude.js 참고)
     );
 
     const insertScene = db.prepare(
@@ -153,9 +155,8 @@ router.post("/projects/:id/narration/complete", (req, res) => {
 // --- 6. 최종 합성 ---
 router.post("/projects/:id/render", async (req, res) => {
   const { id } = req.params;
-  // musicPath: 미지정 시 DEFAULT_MUSIC_PATH(모든 영상 공통 고정 배경음악) 사용, title: 미지정 시 titleCandidates[0] 사용
-  const { musicPath: requestedMusicPath, title } = req.body;
-  const musicPath = requestedMusicPath || DEFAULT_MUSIC_PATH;
+  // title: 미지정 시 titleCandidates[0] 사용. 배경음악은 항상 MUSIC_PATH(채널 고정 테마곡) 사용.
+  const { title } = req.body;
   const workDir = path.join(OUTPUT_ROOT, id);
 
   try {
@@ -216,11 +217,11 @@ router.post("/projects/:id/render", async (req, res) => {
     generateAssSubtitle(timings, assPath, { title: barTitle, totalDurationSec: cursor });
 
     const finalPath = path.join(workDir, "final.mp4");
-    await finalizeWithSubtitlesAndMusic(concatenated, assPath, musicPath, finalPath);
+    await finalizeWithSubtitlesAndMusic(concatenated, assPath, MUSIC_PATH, finalPath);
 
     db.prepare(`UPDATE projects SET video_path = ?, music_track = ?, status = 'rendered' WHERE id = ?`).run(
       finalPath,
-      musicPath || null,
+      MUSIC_PATH,
       id
     );
 

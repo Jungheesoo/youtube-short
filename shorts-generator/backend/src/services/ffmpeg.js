@@ -178,6 +178,13 @@ export function generateAssSubtitle(
   // 제목/자막을 화면 중앙에 오도록 좌우 마진을 동일하게(RIGHT_SAFE_MARGIN 기준) — 우측 세이프존도 함께 만족
   const centeredMargin = RIGHT_SAFE_MARGIN;
 
+  // 상단 제목 글로우 효과: 골드색(#F0DC5A, BGR 헥사 &H005ADCF0) 텍스트를 같은 자리에 두 번 그린다.
+  // 아래(Layer 0) TitleGlow는 두꺼운 동일 색 Outline + \blur 오버라이드 태그로 부드러운 후광을 만들고,
+  // 위(Layer 1) Title은 얇은 Outline만 써서 선명하게 겹친다. ASS Layer는 숫자가 높을수록 위에 그려짐
+  // (libass 공식 문서: https://github.com/libass/libass/wiki/ASSv5-Override-Tags,
+  //  Aegisub ASS Tags: https://aegisub.org/docs/latest/ass_tags/). Outline/blur 수치는 튜닝값이라
+  // 실제 렌더링 결과 보고 조정 필요.
+  const TITLE_GOLD = "&H005ADCF0"; // #F0DC5A
   const header = `[Script Info]
 ScriptType: v4.00+
 PlayResX: ${OUT_W}
@@ -186,7 +193,8 @@ PlayResY: ${OUT_H}
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, BackColour, Bold, Italic, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV
 Style: Caption,Noto Sans KR Black,68,&H0000FFFF,&H00000000,&H00000000,1,1,1,5,2,2,${centeredMargin},${centeredMargin},${captionMarginV}
-Style: Title,Noto Sans KR Black,80,&H0000FFFF,&H00000000,&H00000000,1,1,1,5,2,8,${centeredMargin},${centeredMargin},${titleMarginV}
+Style: TitleGlow,Noto Sans KR Black,80,${TITLE_GOLD},${TITLE_GOLD},&H00000000,1,1,1,16,0,8,${centeredMargin},${centeredMargin},${titleMarginV}
+Style: Title,Noto Sans KR Black,80,${TITLE_GOLD},${TITLE_GOLD},&H00000000,1,1,1,2,0,8,${centeredMargin},${centeredMargin},${titleMarginV}
 
 [Events]
 Format: Layer, Start, End, Style, Text
@@ -199,7 +207,9 @@ Format: Layer, Start, End, Style, Text
   });
 
   if (title) {
-    lines.push(`Dialogue: 0,${toAssTime(0)},${toAssTime(endSec)},Title,${wrapTitleForAss(title)}`);
+    const wrapped = wrapTitleForAss(title);
+    lines.push(`Dialogue: 0,${toAssTime(0)},${toAssTime(endSec)},TitleGlow,{\\blur6}${wrapped}`);
+    lines.push(`Dialogue: 1,${toAssTime(0)},${toAssTime(endSec)},Title,{\\blur0}${wrapped}`);
   }
 
   // 하단 브랜딩바: 실제 콘텐츠(아이콘+채널명)는 75~85% 구간에만 배치, 85~100%는 완전히 비워둔다

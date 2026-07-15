@@ -10,7 +10,6 @@ export default function RenderPage() {
   const { id } = useParams();
   const [rendering, setRendering] = useState(false);
   const [videoPath, setVideoPath] = useState(null);
-  const [musicPath, setMusicPath] = useState("");
   const [error, setError] = useState(null);
   const [checkedImages, setCheckedImages] = useState(false);
   const [checkedNarration, setCheckedNarration] = useState(false);
@@ -41,7 +40,7 @@ export default function RenderPage() {
     setError(null);
     setErrorLog(null);
     try {
-      const { videoPath } = await api.render(id, musicPath || undefined);
+      const { videoPath } = await api.render(id);
       setVideoPath(videoPath);
     } catch (e) {
       setError(e.message);
@@ -72,16 +71,6 @@ export default function RenderPage() {
           </button>
         </div>
       )}
-
-      <label>
-        배경음악 파일 경로 (비워두면 고정 배경음악 "Lullaby" by JVNA 자동 사용 — 다른 곡을 쓰려면 직접 입력)
-        <input
-          type="text"
-          placeholder="비워두면 기본 배경음악 사용"
-          value={musicPath}
-          onChange={(e) => setMusicPath(e.target.value)}
-        />
-      </label>
 
       <div className="curation-checklist">
         <label>

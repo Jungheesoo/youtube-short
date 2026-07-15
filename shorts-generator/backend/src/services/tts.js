@@ -26,8 +26,10 @@ function toSSML(text, { pauseBeforeLastMs = 400 } = {}) {
 /**
  * 나레이션을 음성으로 합성. word-level timestamp를 함께 반환해
  * FFmpeg 자막 타이밍 자동 생성에 사용한다.
+ * voiceName: 기본은 채널 확정 보이스(ko-KR-Chirp3-HD-Charon). test-voices.js에서 후보 비교 시에만
+ * 다른 값을 넘긴다.
  */
-export async function synthesizeNarration(text, outputPath) {
+export async function synthesizeNarration(text, outputPath, voiceName = "ko-KR-Chirp3-HD-Charon") {
   const charCount = text.length;
   const used = getMonthUsage("tts_chars");
   if (used + charCount > MONTHLY_LIMIT) {
@@ -42,7 +44,7 @@ export async function synthesizeNarration(text, outputPath) {
     // 실제로 들어봐야 확인 가능 — 미검증. 남성 보이스 다른 후보: ko-KR-Chirp3-HD-Fenrir,
     // ko-KR-Chirp3-HD-Enceladus, ko-KR-Chirp3-HD-Iapetus, ko-KR-Chirp3-HD-Orus (전부 listVoices API로
     // 남성 확인됨, ffmpeg.js 관련 없음)
-    voice: { languageCode: "ko-KR", name: "ko-KR-Chirp3-HD-Charon" },
+    voice: { languageCode: "ko-KR", name: voiceName },
     audioConfig: { audioEncoding: "MP3", speakingRate: 1.15 },
     enableTimePointing: ["SSML_MARK"], // word-level 타이밍이 필요하면 SSML <mark> 태그 활용 권장
   });

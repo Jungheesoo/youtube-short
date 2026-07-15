@@ -55,11 +55,11 @@ export const api = {
   completeNarration: (projectId) =>
     fetch(`${BASE}/projects/${projectId}/narration/complete`, { method: "POST" }).then(handle),
 
-  render: (projectId, musicPath) =>
+  render: (projectId) =>
     fetch(`${BASE}/projects/${projectId}/render`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ musicPath }),
+      body: JSON.stringify({}),
     }).then(handle),
 
   getQuota: () => fetch(`${BASE}/quota`).then(handle),
