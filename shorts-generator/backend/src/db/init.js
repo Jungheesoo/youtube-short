@@ -34,7 +34,14 @@ CREATE TABLE IF NOT EXISTS scenes (
   audio_path TEXT,
   duration_sec REAL,
   regenerate_count INTEGER DEFAULT 0,
-  scene_type TEXT DEFAULT 'content'  -- 'content' | 'outro'
+  scene_type TEXT DEFAULT 'content',  -- 'content' | 'outro'
+  speaker TEXT DEFAULT 'narrator',    -- 'narrator' | 'characterA' | 'characterB' 등
+  caption_chunks TEXT                 -- 자막 청크 [{text, startSec}] JSON (tts.js synthesizeNarration 결과)
+);
+
+CREATE TABLE IF NOT EXISTS voice_settings (
+  speaker TEXT PRIMARY KEY,
+  voice_name TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS usage_log (
@@ -65,5 +72,29 @@ if (!projectColumns.some((c) => c.name === "description")) {
 if (!projectColumns.some((c) => c.name === "style_guide")) {
   db.exec(`ALTER TABLE projects ADD COLUMN style_guide TEXT`);
 }
+
+// 기존에 speaker/caption_chunks 컬럼 없이 생성된 shorts.db가 있을 경우를 대비한 안전 마이그레이션
+if (!sceneColumns.some((c) => c.name === "speaker")) {
+  db.exec(`ALTER TABLE scenes ADD COLUMN speaker TEXT DEFAULT 'narrator'`);
+}
+if (!sceneColumns.some((c) => c.name === "caption_chunks")) {
+  db.exec(`ALTER TABLE scenes ADD COLUMN caption_chunks TEXT`);
+}
+
+// 화자별 보이스 기본값 시드 — narrator는 채널 확정 보이스(SSML mark 타임포인팅 지원 필수, Chirp3-HD는
+// SSML 자체를 지원하지 않아 자막 청크 타이밍이 항상 폴백되는 문제가 있어 Wavenet-D로 교체함, 2026-07-17),
+// characterA/B는 미검증(사람이 미리듣기로 확인 후 교체 예정)
+db.prepare(`INSERT OR IGNORE INTO voice_settings (speaker, voice_name) VALUES (?, ?)`).run(
+  "narrator",
+  "ko-KR-Wavenet-D"
+);
+db.prepare(`INSERT OR IGNORE INTO voice_settings (speaker, voice_name) VALUES (?, ?)`).run(
+  "characterA",
+  "ko-KR-Neural2-A" // 미검증
+);
+db.prepare(`INSERT OR IGNORE INTO voice_settings (speaker, voice_name) VALUES (?, ?)`).run(
+  "characterB",
+  "ko-KR-Neural2-C" // 미검증
+);
 
 export default db;

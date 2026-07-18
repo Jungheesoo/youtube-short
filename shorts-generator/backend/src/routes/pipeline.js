@@ -16,6 +16,7 @@ import {
   getAudioDuration,
 } from "../services/ffmpeg.js";
 import { updateProjectStatus, getProject, getScenes } from "../jobs/pipelineState.js";
+import { getVoiceSettings, setVoiceSetting } from "../db/queries.js";
 import { logError } from "../utils/logger.js";
 
 const router = Router();
@@ -62,11 +63,20 @@ router.post("/projects", async (req, res) => {
     );
 
     const insertScene = db.prepare(
-      `INSERT INTO scenes (id, project_id, scene_order, narration, image_prompt, duration_sec, scene_type)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO scenes (id, project_id, scene_order, narration, image_prompt, duration_sec, scene_type, speaker)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     );
     script.scenes.forEach((s, i) => {
-      insertScene.run(uuid(), projectId, i, s.narration, s.imagePrompt, s.durationSec, s.sceneType || "content");
+      insertScene.run(
+        uuid(),
+        projectId,
+        i,
+        s.narration,
+        s.imagePrompt,
+        s.durationSec,
+        s.sceneType || "content",
+        s.speaker || "narrator"
+      );
     });
 
     res.json({ projectId, script });
@@ -138,8 +148,25 @@ router.post("/projects/:id/scenes/:sceneId/narration", async (req, res) => {
   try {
     const scene = db.prepare(`SELECT * FROM scenes WHERE id = ?`).get(sceneId);
     const outputPath = path.join(OUTPUT_ROOT, id, `scene_${scene.scene_order}.mp3`);
-    await synthesizeNarration(scene.narration, outputPath);
-    db.prepare(`UPDATE scenes SET audio_path = ? WHERE id = ?`).run(outputPath, sceneId);
+
+    const voiceSettings = getVoiceSettings();
+    const voiceName = voiceSettings[scene.speaker || "narrator"];
+    const { captionChunks } = await synthesizeNarration(scene.narration, outputPath, voiceName);
+
+    let resolvedChunks = captionChunks;
+    if (captionChunks.some((c) => c.isRatio)) {
+      const durationSec = await getAudioDuration(outputPath);
+      resolvedChunks = captionChunks.map((c) => ({
+        text: c.text,
+        startSec: c.isRatio ? c.startSec * durationSec : c.startSec,
+      }));
+    }
+
+    db.prepare(`UPDATE scenes SET audio_path = ?, caption_chunks = ? WHERE id = ?`).run(
+      outputPath,
+      JSON.stringify(resolvedChunks),
+      sceneId
+    );
     res.json({ audioPath: outputPath, quota: getTtsQuotaStatus() });
   } catch (e) {
     logError(`POST /projects/${id}/scenes/${sceneId}/narration`, e);
@@ -195,13 +222,31 @@ router.post("/projects/:id/render", async (req, res) => {
     const concatenated = path.join(workDir, "concatenated.mp4");
     await concatClips(clipPaths, concatenated, workDir);
 
-    // 자막 타이밍도 실제 오디오 길이를 누적해서 계산 (영상 클립 길이와 동일한 기준)
+    // 자막 타이밍도 실제 오디오 길이를 누적해서 계산 (영상 클립 길이와 동일한 기준).
+    // 씬에 caption_chunks(2줄 자막 청크별 상대 시작 시각)가 있으면 청크 단위로 펼쳐서 절대시각으로
+    // 변환하고, 없으면(구 데이터 등) 기존처럼 나레이션 전체를 한 블록으로 폴백한다.
     let cursor = 0;
-    const timings = scenes.map((s, i) => {
+    const timings = [];
+    scenes.forEach((s, i) => {
       const duration = realDurations[i];
-      const t = { text: s.narration, startSec: cursor, endSec: cursor + duration };
+      let chunks = [];
+      try {
+        chunks = s.caption_chunks ? JSON.parse(s.caption_chunks) : [];
+      } catch {
+        chunks = [];
+      }
+
+      if (chunks.length > 0) {
+        chunks.forEach((c, ci) => {
+          const startSec = cursor + c.startSec;
+          const endSec = ci + 1 < chunks.length ? cursor + chunks[ci + 1].startSec : cursor + duration;
+          timings.push({ text: c.text, startSec, endSec });
+        });
+      } else {
+        timings.push({ text: s.narration, startSec: cursor, endSec: cursor + duration });
+      }
+
       cursor += duration;
-      return t;
     });
     // 상단바 제목: 요청에서 override가 없으면 titleCandidates[0].title 사용
     // (title_candidates는 { title, hashtags } 객체 배열 — 작업 9)
@@ -250,6 +295,44 @@ router.get("/logs/error", (req, res) => {
   if (!fs.existsSync(logPath)) return res.json({ log: "" });
   const content = fs.readFileSync(logPath, "utf-8");
   res.json({ log: content.slice(-20000) }); // 너무 길면 최근 부분만
+});
+
+// --- 10. 화자별 보이스 설정 ---
+router.get("/voice-settings", (req, res) => {
+  res.json(getVoiceSettings());
+});
+
+router.put("/voice-settings", (req, res) => {
+  const { narrator, characterA, characterB } = req.body;
+  try {
+    if (narrator) setVoiceSetting("narrator", narrator);
+    if (characterA) setVoiceSetting("characterA", characterA);
+    if (characterB) setVoiceSetting("characterB", characterB);
+    res.json(getVoiceSettings());
+  } catch (e) {
+    logError("PUT /voice-settings", e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+const VOICE_PREVIEW_TEXT = "안녕하세요, 이 목소리는 이렇게 들립니다.";
+const VOICE_NAME_PATTERN = /^[A-Za-z0-9-]+$/;
+
+router.post("/voice-settings/preview", async (req, res) => {
+  const { voiceName } = req.body;
+  if (!voiceName || !VOICE_NAME_PATTERN.test(voiceName)) {
+    return res.status(400).json({ error: "voiceName이 올바르지 않습니다." });
+  }
+  try {
+    const previewPath = path.join(OUTPUT_ROOT, "voice-preview", `${voiceName}.mp3`);
+    if (!fs.existsSync(previewPath)) {
+      await synthesizeNarration(VOICE_PREVIEW_TEXT, previewPath, voiceName);
+    }
+    res.json({ audioPath: previewPath });
+  } catch (e) {
+    logError("POST /voice-settings/preview", e);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 export default router;

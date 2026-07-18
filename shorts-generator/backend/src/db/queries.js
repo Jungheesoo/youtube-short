@@ -49,3 +49,15 @@ export function logUsage(service, amount = 1, projectId = null) {
     projectId
   );
 }
+
+export function getVoiceSettings() {
+  const rows = db.prepare(`SELECT speaker, voice_name FROM voice_settings`).all();
+  return Object.fromEntries(rows.map((r) => [r.speaker, r.voice_name]));
+}
+
+export function setVoiceSetting(speaker, voiceName) {
+  db.prepare(
+    `INSERT INTO voice_settings (speaker, voice_name) VALUES (?, ?)
+     ON CONFLICT(speaker) DO UPDATE SET voice_name = excluded.voice_name`
+  ).run(speaker, voiceName);
+}

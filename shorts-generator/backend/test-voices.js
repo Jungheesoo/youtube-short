@@ -5,7 +5,15 @@ import { synthesizeNarration } from "./src/services/tts.js";
 // 동일한 테스트 문장으로 합성해서 backend/output/voice-test/에 저장한다.
 // 보이스 하나를 최종 확정하면, 그다음엔 별도로 tts.js의 synthesizeNarration 기본값(voiceName)에
 // 고정 반영 요청할 예정 — 지금은 비교용 후보만 나열.
-const CANDIDATE_VOICES = ["ko-KR-Wavenet-D", "ko-KR-Neural2-C", "ko-KR-Wavenet-C"];
+const CANDIDATE_VOICES = [
+  "ko-KR-Wavenet-D",
+  "ko-KR-Neural2-C",
+  "ko-KR-Wavenet-C",
+  "ko-KR-Wavenet-A",
+  "ko-KR-Wavenet-B",
+  "ko-KR-Neural2-A",
+  "ko-KR-Neural2-B",
+];
 
 const TEST_SENTENCE =
   "걱정만 할수록 수명만 깎인다는 말이 있다. 오늘 하루도 애쓰며 살아낸 당신에게, 작은 위로를 건네고 싶다.";

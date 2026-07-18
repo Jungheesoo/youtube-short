@@ -65,4 +65,18 @@ export const api = {
   getQuota: () => fetch(`${BASE}/quota`).then(handle),
 
   getErrorLog: () => fetch(`${BASE}/logs/error`).then(handle),
+
+  getVoiceSettings: () => fetch(`${BASE}/voice-settings`).then(handle),
+  updateVoiceSettings: (settings) =>
+    fetch(`${BASE}/voice-settings`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(settings),
+    }).then(handle),
+  previewVoice: (voiceName) =>
+    fetch(`${BASE}/voice-settings/preview`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ voiceName }),
+    }).then(handle),
 };

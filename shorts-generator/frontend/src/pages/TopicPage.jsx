@@ -40,7 +40,12 @@ export default function TopicPage() {
 
   return (
     <div className="page">
-      <h1>오늘의 마음온도 주제</h1>
+      <div className="page-header-row">
+        <h1>오늘의 마음온도 주제</h1>
+        <button className="settings-link-button" onClick={() => navigate("/settings")}>
+          보이스 설정 →
+        </button>
+      </div>
 
       <div className="topic-input">
         <input

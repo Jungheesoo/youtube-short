@@ -174,17 +174,22 @@ export function generateAssSubtitle(
   const captionMarginV = Math.round(OUT_H - OUT_H * 0.7); // 576
   // 상단바 제목: 아이폰 노치/유튜브 재생 컨트롤 아이콘과 겹쳐 첫 줄이 잘린다는 실사용 피드백으로
   // 여백을 3%→7%로 늘림 (기기별 정확한 세이프존 수치는 미검증 — 비율 기반 여백으로 대응)
-  const titleMarginV = Math.round(OUT_H * 0.07); // 134
+  const titleMarginV = Math.round(OUT_H * 0.055); // 106
   // 제목/자막을 화면 중앙에 오도록 좌우 마진을 동일하게(RIGHT_SAFE_MARGIN 기준) — 우측 세이프존도 함께 만족
   const centeredMargin = RIGHT_SAFE_MARGIN;
 
-  // 상단 제목 글로우 효과: 골드색(#F0DC5A, BGR 헥사 &H005ADCF0) 텍스트를 같은 자리에 두 번 그린다.
-  // 아래(Layer 0) TitleGlow는 두꺼운 동일 색 Outline + \blur 오버라이드 태그로 부드러운 후광을 만들고,
-  // 위(Layer 1) Title은 얇은 Outline만 써서 선명하게 겹친다. ASS Layer는 숫자가 높을수록 위에 그려짐
-  // (libass 공식 문서: https://github.com/libass/libass/wiki/ASSv5-Override-Tags,
-  //  Aegisub ASS Tags: https://aegisub.org/docs/latest/ass_tags/). Outline/blur 수치는 튜닝값이라
-  // 실제 렌더링 결과 보고 조정 필요.
-  const TITLE_GOLD = "&H005ADCF0"; // #F0DC5A
+  // 상단 제목 글로우 효과: 같은 텍스트를 두 번 그린다 — 아래(Layer 0) TitleGlow는 TITLE_GOLD와 같은
+  // 색을 60% 불투명도로 두껍게 그려 부드러운 후광을, 위(Layer 1) Title은 TITLE_GOLD를 100% 불투명도로
+  // 선명하게 겹친다. ASS 색상은 &HAABBGGRR(알파-BGR) 형식이라 알파만 낮춰도 같은 색조를 유지한 채
+  // 후광 느낌을 낼 수 있다 — ASS Layer 숫자가 높을수록 위에 그려지는 동작 자체는 정상(libass 0.17.5,
+  // 공식 문서: https://github.com/libass/libass/wiki/ASSv5-Override-Tags).
+  const TITLE_GOLD_GLOW = "&H665ADCF0"; // #F0DC5A, 알파 0x66(약 60% 불투명) — 후광
+  const TITLE_GOLD = "&H005ADCF0"; // #F0DC5A, 알파 0x00(완전 불투명) — 글자(선명 레이어)
+  // TitleGlow/Title의 Bold를 0으로 둔 이유: "Noto Sans KR Black"은 이미 폰트 자체가 가장 두꺼운
+  // 웨이트라, ASS Bold=1(합성 볼드)을 그 위에 얹으면 "돌"처럼 획이 촘촘한 글자(ㄷ+ㅗ+ㄹ)의 내부
+  // 여백이 Outline/blur와 겹쳐 뭉개지는 문제가 실제로 재현됐다(ffmpeg -f lavfi 프레임 렌더링으로
+  // 확인, 2026-07-17). Bold=0으로 낮추니 해결됨 — Fontsize 104가 이미 충분히 두꺼워 보이므로 시각적
+  // 두께 손실은 없음.
   const header = `[Script Info]
 ScriptType: v4.00+
 PlayResX: ${OUT_W}
@@ -193,8 +198,8 @@ PlayResY: ${OUT_H}
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, BackColour, Bold, Italic, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV
 Style: Caption,Noto Sans KR Black,68,&H0000FFFF,&H00000000,&H00000000,1,1,1,5,2,2,${centeredMargin},${centeredMargin},${captionMarginV}
-Style: TitleGlow,Noto Sans KR Black,80,${TITLE_GOLD},${TITLE_GOLD},&H00000000,1,1,1,16,0,8,${centeredMargin},${centeredMargin},${titleMarginV}
-Style: Title,Noto Sans KR Black,80,${TITLE_GOLD},${TITLE_GOLD},&H00000000,1,1,1,2,0,8,${centeredMargin},${centeredMargin},${titleMarginV}
+Style: TitleGlow,Noto Sans KR Black,104,${TITLE_GOLD_GLOW},${TITLE_GOLD_GLOW},&H00000000,0,0,1,6,0,8,${centeredMargin},${centeredMargin},${titleMarginV}
+Style: Title,Noto Sans KR Black,104,${TITLE_GOLD},${TITLE_GOLD},&H00000000,0,0,1,2,0,8,${centeredMargin},${centeredMargin},${titleMarginV}
 
 [Events]
 Format: Layer, Start, End, Style, Text
@@ -208,7 +213,7 @@ Format: Layer, Start, End, Style, Text
 
   if (title) {
     const wrapped = wrapTitleForAss(title);
-    lines.push(`Dialogue: 0,${toAssTime(0)},${toAssTime(endSec)},TitleGlow,{\\blur6}${wrapped}`);
+    lines.push(`Dialogue: 0,${toAssTime(0)},${toAssTime(endSec)},TitleGlow,{\\blur2}${wrapped}`);
     lines.push(`Dialogue: 1,${toAssTime(0)},${toAssTime(endSec)},Title,{\\blur0}${wrapped}`);
   }
 
@@ -238,7 +243,7 @@ export function finalizeWithSubtitlesAndMusic(videoPath, assPath, musicPath, out
       .videoFilters([`subtitles=${path.basename(assPath)}`])
       .outputOptions(
         musicPath
-          ? ["-filter_complex", "[1:a]volume=0.15[bgm];[0:a][bgm]amix=inputs=2:duration=first", "-c:v libx264"]
+          ? ["-filter_complex", "[1:a]volume=0.2[bgm];[0:a][bgm]amix=inputs=2:duration=first", "-c:v libx264"]
           : ["-c:v libx264"]
       )
       .save(outputPath)

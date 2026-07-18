@@ -11,6 +11,9 @@ export const STORYBOOK_STYLE = `soft watercolor and colored-pencil illustration,
 // 인물 구도 고정 지시 — 인물이 항상 화면에 크게 나오도록.
 export const COMPOSITION_RULE = `The subject must be shot as a medium shot / close-up, filling roughly half to two-thirds of the frame from waist-up, with a clearly visible face and posture. The background should be softly blurred, with the subject in sharp focus. Avoid wide landscape shots where the person appears small in the frame.`;
 
+// 대화(캐릭터) 씬 전용 인물 구도 고정 지시 — 두 인물이 함께 등장하는 자연스러운 미디엄샷.
+export const COMPOSITION_RULE_DIALOGUE = `Two people shot in a natural medium-shot composition, both upper bodies clearly visible and interacting naturally within the frame. Both subjects' necks connect naturally and continuously to their shoulders, no floating heads. Both hands of each person clearly visible, five fingers each, no overlapping or merged limbs. The background should be softly blurred with both subjects in sharp focus.`;
+
 // 씬 상황(시간대)에 맞는 색감 — Claude는 이 중 하나의 키(timeOfDay)만 고르고,
 // 실제 색감 문구는 백엔드가 붙인다 (출력 토큰 절약 + 색감 문구 일관성 확보).
 export const TIME_OF_DAY_PALETTE = {
@@ -39,9 +42,10 @@ export const VERTICAL_SUFFIX = `vertical 9:16 portrait orientation, mobile phone
  * Claude는 장면 묘사(sceneDescription)와 씬별 timeOfDay 키만 생성.
  * 최종 구조: [장면 묘사] + [COMPOSITION_RULE] + [해당 timeOfDay 색감] + [STORYBOOK_STYLE] + [VERTICAL_SUFFIX]
  */
-function buildImagePrompt(sceneDescription, timeOfDay) {
+function buildImagePrompt(sceneDescription, timeOfDay, speaker) {
   const palette = TIME_OF_DAY_PALETTE[timeOfDay] || TIME_OF_DAY_PALETTE.day;
-  return [sceneDescription, COMPOSITION_RULE, palette, STORYBOOK_STYLE, VERTICAL_SUFFIX].filter(Boolean).join(", ");
+  const composition = speaker && speaker !== "narrator" ? COMPOSITION_RULE_DIALOGUE : COMPOSITION_RULE;
+  return [sceneDescription, composition, palette, STORYBOOK_STYLE, VERTICAL_SUFFIX].filter(Boolean).join(", ");
 }
 
 /**
@@ -64,7 +68,7 @@ export async function generateScript(topic) {
   ],
   "description": "유튜브 설명란에 들어갈 텍스트",
   "scenes": [
-    { "narration": "나레이션 텍스트", "sceneDescription": "장면 묘사만 담은 영어 문장(스타일/화질/카메라/비율 문구 없이)", "timeOfDay": "day", "durationSec": 4, "sceneType": "content" }
+    { "narration": "나레이션 텍스트", "sceneDescription": "장면 묘사만 담은 영어 문장(스타일/화질/카메라/비율 문구 없이)", "timeOfDay": "day", "durationSec": 4, "sceneType": "content", "speaker": "narrator" }
   ]
 }
 
@@ -94,6 +98,12 @@ export async function generateScript(topic) {
   예: "초라해진 적 있으신가요?" (X) → "초라해진 적이 있다" (O), "괜찮습니다" (X) → "괜찮다" (O)
 - 본편 마지막 씬(아웃트로 직전)은 감정적으로 가장 깊은 여운을 주는 장면으로 구성
 - sceneType 필드는 반드시 명시: 본편은 "content", 마지막 1개는 "outro"
+- 대화는 기본이 아니라 예외다. 주제가 순수하게 나레이터의 통찰/서술만으로 완결되는 경우가 대부분이며 이 경우 모든 씬의 speaker는 항상 "narrator"다. 대화는 오직 그 소재 자체가 누군가의 실제 말 한마디를 직접 인용해야 의미가 사는 경우(예: 부모님이 해준 말, 친구의 위로, 낯선 이의 한마디가 통찰의 핵심 소재인 주제)에만 예외적으로 사용하고, 이 경우에도 전체 씬 중 1~2개 씬에만 적용한다. 지금 추천되는 4개 카테고리(EMOTION_CATEGORIES) 전부에서 대화가 필요한 것도 아니니, 주제 성격에 맞지 않으면 절대 억지로 대화를 끼워 넣지 마라.
+- 각 씬 JSON에는 speaker 필드를 반드시 포함해: 기본값은 "narrator"이고, 위 예외에 해당하는 씬만 "characterA" / "characterB" 등으로 표시
+- 대화가 등장하는 씬은 한 씬에 여러 대사를 몰아넣지 말고, 화자별로 씬을 분리해서 생성할 것(예: characterA의 대사 1씬 + characterB의 반응 1씬)
+- 캐릭터(비-narrator) 씬의 narration은 위의 서술체(~다, ~였다) 규칙 대신, 실제 구어체 대사로 10~15자 내외로 짧게 쓸 것(예: "괜찮아, 네 잘못 아니야"). 단 이 예외는 대화 씬에만 적용되고, narrator 씬의 서술체 종결어미 규칙은 그대로 유지
+- 대화 씬의 sceneDescription은 그 화자가 말하거나 반응하는 모습(표정, 시선, 손짓)을 포함하고, 대화 상대가 함께 프레임에 있는 2인 구도로 구성할 것. 인물 묘사 시 위 규칙대로 한국인으로 명시하고(예: "a Korean woman gently speaking to a Korean man"), 목-어깨 연결과 손이 명확히 보이도록 안전장치 문구를 포함할 것(anatomically correct, no floating head, five fingers each, no overlapping limbs) — 두 인물 모두에 적용
+- 대화 예외의 두 인물(characterA/characterB)은 외형(헤어스타일, 옷차림 색깔·종류, 대략적 나이대)을 구체적으로 정해서, 그 대화가 걸친 모든 씬(예: characterA의 대사 씬 + characterB의 반응 씬)의 sceneDescription에 매번 동일한 표현으로 반복 명시할 것(예: 한 씬에서 "a Korean woman in a beige cardigan with short bob hair"라고 썼다면, 같은 대화의 다른 씬에서도 이 인물은 항상 이 표현 그대로 등장). 이미지가 씬별로 따로 생성되기 때문에 외형 묘사가 씬마다 다르면 같은 대화인데 다른 사람처럼 보이는 문제가 생긴다. 단, 이 규칙은 하나의 대화 안에서만 적용되고, 그 대화와 무관한 다른 본편 씬(예: 비교·몽타주형 소재에서 씬마다 의도적으로 다른 인물이 등장하는 경우)에는 적용하지 마라 — 그런 씬들끼리는 인물이 서로 달라도 된다
 
 첫 번째 씬(scenes[0]) sceneDescription 규칙 (시각적 훅, 매우 중요):
 - title의 역설적/통찰적 한 줄을 시각적으로 뒷받침하는 상징적이고 감정이 드러나는 장면으로 구성
@@ -129,7 +139,8 @@ export async function generateScript(topic) {
 
   script.scenes = (script.scenes || []).map((s) => ({
     ...s,
-    imagePrompt: buildImagePrompt(s.sceneDescription, s.timeOfDay),
+    speaker: s.speaker || "narrator",
+    imagePrompt: buildImagePrompt(s.sceneDescription, s.timeOfDay, s.speaker),
   }));
 
   return script;

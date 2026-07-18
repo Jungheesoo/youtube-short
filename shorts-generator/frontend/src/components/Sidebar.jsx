@@ -29,6 +29,11 @@ export default function Sidebar() {
           );
         })}
       </nav>
+      <nav className="sidebar-secondary">
+        <NavLink to="/settings" className={({ isActive }) => `step ${isActive ? "active" : ""}`}>
+          보이스 설정
+        </NavLink>
+      </nav>
     </aside>
   );
 }

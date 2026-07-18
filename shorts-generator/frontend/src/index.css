@@ -26,6 +26,12 @@ body {
 .step.active { background: #6366f1; color: white; }
 .step.disabled { opacity: 0.4; pointer-events: none; }
 
+.sidebar-secondary {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid #2a2a30;
+}
+
 .content { flex: 1; padding: 32px; max-width: 900px; }
 
 .page h1 { margin-bottom: 20px; }
@@ -116,4 +122,18 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 }
 .description-box pre {
   white-space: pre-wrap; font-family: inherit; font-size: 13px; color: #ddd; margin: 0 0 10px;
+}
+
+.page-header-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+.page-header-row h1 { margin-bottom: 0; }
+.settings-link-button { background: transparent; border: 1px solid #333; color: #aaa; }
+.settings-link-button:hover { color: white; border-color: #6366f1; }
+
+.settings-form { max-width: 480px; display: flex; flex-direction: column; gap: 16px; }
+.settings-row { display: flex; flex-direction: column; gap: 6px; }
+.settings-row label { font-size: 14px; color: #ccc; }
+.settings-row-controls { display: flex; align-items: center; gap: 8px; }
+.settings-row-controls select {
+  flex: 1; padding: 10px 12px; border-radius: 8px; border: 1px solid #333;
+  background: #1c1c22; color: white; font-size: 14px;
 }
