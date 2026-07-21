@@ -2,10 +2,6 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api, toOutputUrl } from "../api/client.js";
 
-// 모든 영상에 고정으로 쓰는 댓글. 매번 새로 생성하지 않고 채널 톤에 맞춰 고정 문구로 둔다.
-const PINNED_COMMENT = `오늘 이 이야기가, 지쳐있던 누군가의 마음에 작은 쉼표가 되었으면 합니다.
-여러분은 오늘 어떤 하루를 보내셨나요? 댓글로 편하게 나눠주세요 🤍`;
-
 export default function RenderPage() {
   const { id } = useParams();
   const [rendering, setRendering] = useState(false);
@@ -15,6 +11,7 @@ export default function RenderPage() {
   const [checkedNarration, setCheckedNarration] = useState(false);
   const [titleCandidates, setTitleCandidates] = useState([]);
   const [description, setDescription] = useState("");
+  const [pinnedComment, setPinnedComment] = useState("");
   const [copied, setCopied] = useState(null);
   const [errorLog, setErrorLog] = useState(null);
 
@@ -26,6 +23,7 @@ export default function RenderPage() {
         setTitleCandidates([]);
       }
       setDescription(project.description || "");
+      setPinnedComment(project.pinned_comment || "");
     });
   }, [id]);
 
@@ -133,8 +131,8 @@ export default function RenderPage() {
 
             <h3>고정 댓글</h3>
             <div className="description-box">
-              <pre>{PINNED_COMMENT}</pre>
-              <button onClick={() => copyText("pinnedComment", PINNED_COMMENT)}>
+              <pre>{pinnedComment}</pre>
+              <button onClick={() => copyText("pinnedComment", pinnedComment)}>
                 {copied === "pinnedComment" ? "복사됨!" : "댓글 복사"}
               </button>
             </div>

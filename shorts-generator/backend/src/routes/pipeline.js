@@ -50,8 +50,8 @@ router.post("/projects", async (req, res) => {
     const projectId = uuid();
 
     db.prepare(
-      `INSERT INTO projects (id, topic, category, status, script_json, title_candidates, description, style_guide)
-       VALUES (?, ?, ?, 'script_done', ?, ?, ?, ?)`
+      `INSERT INTO projects (id, topic, category, status, script_json, title_candidates, description, style_guide, pinned_comment)
+       VALUES (?, ?, ?, 'script_done', ?, ?, ?, ?, ?)`
     ).run(
       projectId,
       topic,
@@ -59,7 +59,8 @@ router.post("/projects", async (req, res) => {
       JSON.stringify(script),
       JSON.stringify(script.titleCandidates),
       script.description || null,
-      null // style_guide: 화풍은 STORYBOOK_STYLE로 고정, 더 이상 씬별로 생성하지 않음 (claude.js 참고)
+      null, // style_guide: 화풍은 STORYBOOK_STYLE로 고정, 더 이상 씬별로 생성하지 않음 (claude.js 참고)
+      script.pinnedComment || null
     );
 
     const insertScene = db.prepare(

@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS projects (
   script_json TEXT,            -- Claude가 생성한 씬 구조 JSON
   title_candidates TEXT,       -- 제목 후보 JSON 배열
   description TEXT,            -- 유튜브 설명란용 텍스트
+  pinned_comment TEXT,          -- 채널 고정 댓글 텍스트 (영상마다 새로 생성)
   style_guide TEXT,             -- Claude가 주제에 맞춰 매번 결정한 아트 스타일 문구 (모든 씬 imagePrompt에 공통 삽입)
   music_track TEXT,            -- 사용한 배경음악 출처 기록 (저작권 대응용)
   video_path TEXT,
@@ -71,6 +72,11 @@ if (!projectColumns.some((c) => c.name === "description")) {
 // 기존에 style_guide 컬럼 없이 생성된 shorts.db가 있을 경우를 대비한 안전 마이그레이션
 if (!projectColumns.some((c) => c.name === "style_guide")) {
   db.exec(`ALTER TABLE projects ADD COLUMN style_guide TEXT`);
+}
+
+// 기존에 pinned_comment 컬럼 없이 생성된 shorts.db가 있을 경우를 대비한 안전 마이그레이션
+if (!projectColumns.some((c) => c.name === "pinned_comment")) {
+  db.exec(`ALTER TABLE projects ADD COLUMN pinned_comment TEXT`);
 }
 
 // 기존에 speaker/caption_chunks 컬럼 없이 생성된 shorts.db가 있을 경우를 대비한 안전 마이그레이션
