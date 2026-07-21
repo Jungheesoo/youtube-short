@@ -183,8 +183,17 @@ export function generateAssSubtitle(
   // 선명하게 겹친다. ASS 색상은 &HAABBGGRR(알파-BGR) 형식이라 알파만 낮춰도 같은 색조를 유지한 채
   // 후광 느낌을 낼 수 있다 — ASS Layer 숫자가 높을수록 위에 그려지는 동작 자체는 정상(libass 0.17.5,
   // 공식 문서: https://github.com/libass/libass/wiki/ASSv5-Override-Tags).
+  //
+  // 글자가 흐릿해 보인다는 피드백(2026-07-21)으로 확인해보니, 이 시스템에는 "Noto Sans KR Black"이
+  // 별도 고정폭 인스턴스로 설치돼있지 않고 가변폰트(NotoSansKR-VF.ttf)만 있어, libass(directwrite)가
+  // 이름 매칭에 실패하고 얇은 대체 폰트(맑은 고딕 등)로 폴백하는 게 ffmpeg -f lavfi 프레임 렌더링으로
+  // 재현됨. 얇은 폰트에 두꺼운 아웃라인(6)+블러(2)를 같은 금색으로 겹치니 글자 획 사이가 번져 후광이
+  // 아니라 뭉개진 안개처럼 보였다. Title(선명 레이어)에 검정 아웃라인을 추가해 윤곽을 잡아주고,
+  // TitleGlow의 Outline/blur를 낮춰 후광을 더 은은하게 만드니 대체 폰트에서도 또렷하게 보임(같은 방식
+  // 으로 확인).
   const TITLE_GOLD_GLOW = "&H665ADCF0"; // #F0DC5A, 알파 0x66(약 60% 불투명) — 후광
   const TITLE_GOLD = "&H005ADCF0"; // #F0DC5A, 알파 0x00(완전 불투명) — 글자(선명 레이어)
+  const TITLE_OUTLINE_BLACK = "&H00000000"; // 완전 불투명 검정 — 글자 윤곽을 잡아 흐려 보이지 않게 함
   // TitleGlow/Title의 Bold를 0으로 둔 이유: "Noto Sans KR Black"은 이미 폰트 자체가 가장 두꺼운
   // 웨이트라, ASS Bold=1(합성 볼드)을 그 위에 얹으면 "돌"처럼 획이 촘촘한 글자(ㄷ+ㅗ+ㄹ)의 내부
   // 여백이 Outline/blur와 겹쳐 뭉개지는 문제가 실제로 재현됐다(ffmpeg -f lavfi 프레임 렌더링으로
@@ -198,8 +207,8 @@ PlayResY: ${OUT_H}
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, BackColour, Bold, Italic, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV
 Style: Caption,Noto Sans KR Black,68,&H0000FFFF,&H00000000,&H00000000,1,1,1,5,2,2,${centeredMargin},${centeredMargin},${captionMarginV}
-Style: TitleGlow,Noto Sans KR Black,104,${TITLE_GOLD_GLOW},${TITLE_GOLD_GLOW},&H00000000,0,0,1,6,0,8,${centeredMargin},${centeredMargin},${titleMarginV}
-Style: Title,Noto Sans KR Black,104,${TITLE_GOLD},${TITLE_GOLD},&H00000000,0,0,1,2,0,8,${centeredMargin},${centeredMargin},${titleMarginV}
+Style: TitleGlow,Noto Sans KR Black,104,${TITLE_GOLD_GLOW},${TITLE_GOLD_GLOW},&H00000000,0,0,1,3,0,8,${centeredMargin},${centeredMargin},${titleMarginV}
+Style: Title,Noto Sans KR Black,104,${TITLE_GOLD},${TITLE_OUTLINE_BLACK},&H00000000,0,0,1,3,0,8,${centeredMargin},${centeredMargin},${titleMarginV}
 
 [Events]
 Format: Layer, Start, End, Style, Text
@@ -213,7 +222,7 @@ Format: Layer, Start, End, Style, Text
 
   if (title) {
     const wrapped = wrapTitleForAss(title);
-    lines.push(`Dialogue: 0,${toAssTime(0)},${toAssTime(endSec)},TitleGlow,{\\blur2}${wrapped}`);
+    lines.push(`Dialogue: 0,${toAssTime(0)},${toAssTime(endSec)},TitleGlow,{\\blur3}${wrapped}`);
     lines.push(`Dialogue: 1,${toAssTime(0)},${toAssTime(endSec)},Title,{\\blur0}${wrapped}`);
   }
 
